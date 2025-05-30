@@ -94,6 +94,7 @@ export async function fetchOrdersByUserId(userId: number): Promise<Order[]> {
         const response = await WooCommerce.get("orders", {
             headers: { Authorization: `Bearer ${token}` },
             params: { customer: userId },
+            caches: false,
         });
         return response.data as Order[];
     } catch (error) {

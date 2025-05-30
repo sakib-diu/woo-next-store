@@ -7,13 +7,13 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useCart } from "@/hooks/use-cart"
-import { FormValues, OrderData, formSchema } from "@/lib/validation"
-import { CountryData, ShippingMethodData, ShippingZoneData, StateData, TaxtData } from "@/types/woocommerce"
+import { FormValues, OrderData, checkoutFormSchema } from "@/lib/validation"
+import { CountryData, Customer, ShippingMethodData, ShippingZoneData, StateData, TaxtData } from "@/types/woocommerce"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { debounce } from "lodash"
 import { Banknote } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { Suspense, useCallback, useEffect, useState } from "react"
+import { Suspense, use, useCallback, useEffect, useState } from "react"
 import { useForm } from "react-hook-form"
 import { toast } from "sonner"
 
@@ -21,9 +21,10 @@ interface CheckoutFormProps {
     countries: CountryData[]
     taxes: TaxtData[]
     shippingZones: ShippingZoneData[];
+    customer?: Customer;
 }
 
-export function CheckoutForm({ countries, taxes, shippingZones }: CheckoutFormProps) {
+export function CheckoutForm({ countries, taxes, shippingZones, customer }: CheckoutFormProps) {
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [formError, setFormError] = useState<string | null>(null)
     const [formSuccess, setFormSuccess] = useState<string | null>(null)
@@ -40,18 +41,18 @@ export function CheckoutForm({ countries, taxes, shippingZones }: CheckoutFormPr
 
 
     const form = useForm<FormValues>({
-        resolver: zodResolver(formSchema),
+        resolver: zodResolver(checkoutFormSchema),
         defaultValues: {
             delivery: {
-                first_name: "sakin",
-                last_name: "ullah",
-                address_1: "mirpur, dhaka",
-                city: "",
+                first_name: customer?.billing.first_name || "",
+                last_name: customer?.billing.last_name || "",
+                address_1: customer?.billing.address_1 || "",
+                city: customer?.billing.city || "",
                 state: "",
                 country: "",
-                postcode: "1215",
-                email: "sakib@gmail.com",
-                phone: "112323413",
+                postcode: customer?.billing.postcode || "",
+                email: customer?.billing.email || "",
+                phone: customer?.billing.phone || "",
             },
             terms: false,
             couponCode: "",
@@ -66,6 +67,16 @@ export function CheckoutForm({ countries, taxes, shippingZones }: CheckoutFormPr
         };
     }, [setShipping, setSelectedTaxes]);
 
+    // useEffect(() => {
+    //     // Set initial states based on selected country
+    //     const initialCountry = form.getValues('delivery.country');
+    //     if (initialCountry) {
+    //         const selectedCountry = countries.find((country) => country.code === initialCountry);
+    //         setStates(selectedCountry?.states || []);
+    //         const selectedTax = taxes.find((tax) => tax.country === initialCountry);
+    //         setSelectedTaxes(selectedTax ? [selectedTax] : []);
+    //     }
+    // })
 
 
     // Debounced calculateShipping

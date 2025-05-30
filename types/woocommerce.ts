@@ -84,6 +84,9 @@ export interface VariationProduct {
 export interface Order {
     id: number;
     status: string;
+    parent_id: string;
+    number: string;
+    total_tax: string;
     total: string;
     date_created: string;
     billing: {
@@ -118,6 +121,8 @@ export interface Order {
 export interface Customer {
     id: number;
     email: string;
+    phone: string;
+    date_created: string;
     first_name: string;
     last_name: string;
     username: string;
@@ -126,6 +131,7 @@ export interface Customer {
         first_name: string;
         last_name: string;
         address_1: string;
+        address_2?: string;
         city: string;
         state: string;
         postcode: string;
@@ -137,11 +143,30 @@ export interface Customer {
         first_name: string;
         last_name: string;
         address_1: string;
+        address_2?: string;
         city: string;
         state: string;
         postcode: string;
         country: string;
     };
+}
+
+export interface DownloadData {
+    download_id: string;
+    download_url: string;
+    product_id: number;
+    product_name: string;
+    download_name: string;
+    order_id: number;
+    order_key: string;
+    downloads_remaining: string;
+    access_expires: string;
+    access_expires_gmt: string;
+    file: {
+        name: string;
+        file: string;
+    };
+   
 }
 
 export interface CountryData {
