@@ -17,6 +17,7 @@ import ModalQuickview from '@/components/Modal/ModalQuickview';
 import ModalSearch from '@/components/Modal/ModalSearch';
 import ModalWishlist from '@/components/Modal/ModalWishlist';
 import '@/styles/styles.scss';
+import NextTopLoader from 'nextjs-toploader';
 import { Instrument_Sans } from 'next/font/google';
 import { Metadata } from 'next';
 import { STOREINFO } from '../constant/storeConstants';
@@ -64,6 +65,7 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <body className={instrument.className}>
+        <NextTopLoader color="#9ad346" showSpinner={false} height={3} />
         <AuthProvider>
           <CartProvider>
             <AppDataProvider

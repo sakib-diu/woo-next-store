@@ -379,7 +379,7 @@ const Default: React.FC<Props> = ({ data, productId, variations, relatedProducts
                             <div className="flex justify-between">
                                 <div>
                                     <div className="caption2 text-secondary font-semibold uppercase">{data.tags[0]?.name || ""}</div>
-                                    <div className="heading4 mt-1">{data.name}</div>
+                                    <div className="heading4 max-w-[85%] mt-1">{data.name}</div>
                                 </div>
                                 <div
                                     className={`add-wishlist-btn w-12 h-12 flex items-center justify-center border border-line cursor-pointer rounded-xl duration-300 hover:bg-black hover:text-white ${wishlistState.wishlistArray.some(item => item.id.toString() === data.id.toString()) ? 'active' : ''}`}
