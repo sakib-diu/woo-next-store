@@ -1,6 +1,6 @@
 export const STOREINFO = {
-    name: "Vertex ",
-    email: "support@Vertex.com",
+    name: "Zombie Store",
+    email: "shaownsilva@gmail.com",
     phoneNumber: "+1 (555) 123-4567",
-    description: "Your favorite online destination for modern and stylish fashion.",
+    description: "Your favorite online destination for quality products, proudly based in New York.",
 };
