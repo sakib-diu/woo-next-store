@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "novamira-wp-joynalbokhsho": {
+      "command": "npx",
+      "args": ["-y", "@automattic/mcp-wordpress-remote@latest"],
+      "env": {
+        "WP_API_URL": "https://wp.joynalbokhsho.me/wp-json/mcp/novamira",
+        "WP_API_USERNAME": "sakib",
+        "WP_API_PASSWORD": "HfL8eG9npWxZipssBcneoVNA"
+      }
+    }
+  }
+}
