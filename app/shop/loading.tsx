@@ -82,9 +82,9 @@ export default function ShopLoading() {
             {/* Shop Content Loading Skeleton */}
             <div className="shop-product breadcrumb1 lg:py-20 md:py-14 py-10">
                 <div className="container">
-                    <div className="flex max-md:flex-wrap max-md:flex-col-reverse gap-y-8">
+                    <div className="flex max-md:flex-wrap gap-y-8">
                         {/* Sidebar Loading */}
-                        <div className="sidebar lg:w-1/4 md:w-1/3 w-full md:pr-12">
+                        <div className="sidebar lg:w-1/4 md:w-1/3 w-full md:pr-12 max-md:hidden">
                             {/* Filter Type */}
                             <div className="filter-type pb-8 border-b border-line">
                                 <div className="w-24 h-6 bg-gray-200 rounded animate-pulse mb-4"></div>

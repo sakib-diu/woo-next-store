@@ -1,8 +1,6 @@
-import { off } from "process";
-
 export const COLORS: { [key: string]: string } = {
   black: '#333333',
-  gery: '#808080',
+  gray: '#808080',
   lightgray: '#DCDCDC',
   lightblue: '#ADD8E6',
   lightyellow: '#FFFFE0',

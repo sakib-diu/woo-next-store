@@ -16,6 +16,35 @@ export function formatDate(dateString: string): string {
   })
 }
 
+// Deterministic key for grouping/matching taxonomy entries by their display name
+// (e.g. collapsing "Shoes" / "Shoes" / "Shoes" subcategories that repeat per audience
+// category into one facet). Pure and shared between server and client code.
+export function slugifyKey(value: string): string {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+const NAMED_HTML_ENTITIES: Record<string, string> = {
+  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ',
+  '#038': '&', '#8211': '–', '#8212': '—', '#8216': '‘', '#8217': '’', '#8220': '“', '#8221': '”',
+};
+
+// WooCommerce/WordPress return taxonomy names (categories, tags) with HTML entities encoded
+// (e.g. "Pants &amp; Tights"). Unlike `decodeHtmlEntities`, this doesn't touch the DOM, so it's
+// safe to call during server rendering without causing a hydration mismatch.
+export function decodeEntities(value: string): string {
+  return value.replace(/&(#\d+|#x[0-9a-f]+|[a-z]+);/gi, (match, code: string) => {
+    if (code[0] === '#') {
+      const codePoint = code[1]?.toLowerCase() === 'x' ? parseInt(code.slice(2), 16) : parseInt(code.slice(1), 10);
+      return Number.isNaN(codePoint) ? match : String.fromCodePoint(codePoint);
+    }
+    return NAMED_HTML_ENTITIES[code.toLowerCase()] ?? match;
+  });
+}
+
 export function decodeHtmlEntities(html: string) {
   if (typeof window !== 'undefined') {
     const doc = new DOMParser().parseFromString(html, 'text/html');

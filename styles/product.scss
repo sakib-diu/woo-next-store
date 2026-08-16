@@ -454,6 +454,48 @@
   }
 }
 
+// Caps each sidebar filter section's option list so a long facet (e.g. every size) can't push
+// the rest of the sidebar down indefinitely. The scrollbar stays invisible until hovered so the
+// section doesn't look scrollable-by-default at a glance.
+.filter-scroll {
+  max-height: 224px;
+  overflow-y: hidden;
+
+  &:hover {
+    overflow-y: auto;
+  }
+
+  &::-webkit-scrollbar {
+    width: 6px;
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background-color: transparent;
+    border-radius: 4px;
+  }
+
+  &:hover::-webkit-scrollbar-thumb {
+    background-color: var(--secondary2);
+  }
+}
+
+@keyframes filterSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.filter-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--line);
+  border-top-color: var(--secondary2);
+  border-radius: 50%;
+  animation: filterSpin 0.6s linear infinite;
+}
+
 .show-product-sold {
 
   .product-item .product-main .product-infor .list-color,

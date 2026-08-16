@@ -8,6 +8,7 @@ import { Metadata } from 'next';
 import { getAttributesWithTerms, getBrands, getProductCategories, getProductTags } from '../../actions/data-actions';
 import { STOREINFO } from '../../constant/storeConstants';
 import { CategorieType, TagType } from '@/types/data-type';
+import { slugifyKey } from '@/lib/utils';
 
 const PRODUCTS_PER_PAGE = 9;
 
@@ -54,25 +55,51 @@ export default async function BreadCrumb1({ searchParams }: BreadCrumb1Props) {
         getAttributesWithTerms(),
     ]);
 
-    // `category` and `gender` both resolve to product-category IDs (gender is modeled as a
-    // category in this catalog, e.g. "gender_male"). WooCommerce's `category` param treats a
-    // comma-separated list as OR, not AND, so combining both is a broader match than the two
-    // filters applied strictly together — acceptable since they rarely target the same request.
-    const categoryIds = [category, gender]
-        .map(slug => findIdBySlug(categories as CategorieType[], slug))
-        .filter((id): id is number => id !== undefined);
+    // `gender` selects a top-level (parent === 0) category — the catalog's audience split
+    // (Men/Women/Kids/Unisex/Baby & Toddler). `category` selects a "product type" facet
+    // (e.g. "Shoes"), which in this catalog exists as a *separate* subcategory per audience
+    // (shoes, shoes-men, shoes-women, ...) — so it's matched by grouping subcategories with
+    // the same display name (see slugifyKey) and resolving to every category ID in that group.
+    // WooCommerce's `category` param treats a comma-separated list as OR, not AND, so combining
+    // an audience with a product-type group is a broader match than the two applied strictly
+    // together — acceptable since there's no way to express AND in a single REST call.
+    const genderId = findIdBySlug(categories as CategorieType[], gender);
+    const typeCategoryIds = category
+        ? (categories as CategorieType[])
+            .filter(cat => cat.parent !== 0 && slugifyKey(cat.name) === category.toLowerCase())
+            .map(cat => cat.id)
+        : [];
+    const categoryIds = [
+        ...(genderId !== undefined ? [genderId] : []),
+        ...typeCategoryIds,
+    ];
 
     const tagId = findIdBySlug(tags as TagType[], type);
 
-    const brandId = brand
-        ? brands.find(b => b.name.toLowerCase() === brand.toLowerCase())?.id
-        : undefined;
+    // `brand` holds a comma-separated list of brand names so multiple brands can be selected at once.
+    const brandIds = (brand ?? '')
+        .split(',')
+        .map(b => b.trim().toLowerCase())
+        .filter(Boolean)
+        .map(name => brands.find(b => b.name.toLowerCase() === name)?.id)
+        .filter((id): id is number => id !== undefined);
 
     // WooCommerce's REST API only supports filtering by one attribute taxonomy per request.
-    // If both size and color are selected, size is pushed server-side and color is applied
-    // as an additional client-side narrowing over that page's results only.
+    // Size takes the server-side slot when both size and color are selected; color is then
+    // applied as an additional client-side narrowing over that page's results only (see below).
     const sizeAttr = attributesWithTerms.find(a => a.attribute.name.toLowerCase() === 'size');
-    const sizeTermId = size ? sizeAttr?.terms.find(t => t.name.toLowerCase() === size.toLowerCase())?.id : undefined;
+    const colorAttr = attributesWithTerms.find(a => a.attribute.name.toLowerCase() === 'color');
+    const sizeTerm = size ? sizeAttr?.terms.find(t => t.name.toLowerCase() === size.toLowerCase()) : undefined;
+    const colorTerm = color ? colorAttr?.terms.find(t => t.name.toLowerCase() === color.toLowerCase()) : undefined;
+
+    // WooCommerce's `products/attributes` endpoint already returns the taxonomy slug
+    // pre-prefixed (e.g. "pa_color"), so it's used as-is rather than prefixed again.
+    const serverAttribute = sizeTerm
+        ? { slug: sizeAttr!.attribute.slug, termId: sizeTerm.id }
+        : colorTerm
+            ? { slug: colorAttr!.attribute.slug, termId: colorTerm.id }
+            : undefined;
+    const needsClientColorNarrowing = Boolean(sizeTerm && colorTerm);
 
     const sortKey = sort ?? '';
     const sortConfig = SORT_MAP[sortKey];
@@ -86,9 +113,9 @@ export default async function BreadCrumb1({ searchParams }: BreadCrumb1Props) {
         perPage: PRODUCTS_PER_PAGE,
         categoryIds: categoryIds.length ? categoryIds : undefined,
         tagIds: tagId !== undefined ? [tagId] : undefined,
-        brandIds: brandId !== undefined ? [brandId] : undefined,
-        attributeSlug: sizeTermId !== undefined ? `pa_${sizeAttr!.attribute.slug}` : undefined,
-        attributeTermId: sizeTermId,
+        brandIds: brandIds.length ? brandIds : undefined,
+        attributeSlug: serverAttribute?.slug,
+        attributeTermId: serverAttribute?.termId,
         minPrice,
         maxPrice,
         onSale,
@@ -102,6 +129,12 @@ export default async function BreadCrumb1({ searchParams }: BreadCrumb1Props) {
         );
     }
 
+    const filteredProducts = needsClientColorNarrowing
+        ? products.filter(p => p.attributes.some(attr =>
+            attr.name.toLowerCase() === 'color' && attr.options.some(opt => opt.toLowerCase() === color!.toLowerCase())
+        ))
+        : products;
+
     return (
         <>
             <TopNavOne props="style-one bg-black" slogan="New customers save 10% with the code GET10" />
@@ -110,7 +143,7 @@ export default async function BreadCrumb1({ searchParams }: BreadCrumb1Props) {
             </div>
             <Suspense fallback={<div>Loading breadcrumb...</div>}>
                 <ShopBreadCrumb1
-                    products={products}
+                    products={filteredProducts}
                     totalItems={totalItems}
                     totalPages={totalPages}
                     currentPage={page}
