@@ -18,7 +18,6 @@ import React, { useEffect, useState } from 'react'
 import Marquee from 'react-fast-marquee'
 import { toast } from 'sonner'
 import { useAppData } from '../../context/AppDataContext'
-import { QuickShopDrawer } from './QuickShopDrawer'
 
 interface ProductProps {
     data: ProductType
@@ -50,8 +49,6 @@ const Product: React.FC<ProductProps> = ({ data, type, style }) => {
     const hasVariations = data.attributes?.length > 0 && data.variations?.length > 0
     const { variations, isLoading: isLoadingVariations } = useProductVariations(data.id, hasVariations)
     const [selectedVariation, setSelectedVariation] = useState<VariationProduct | null>(null);
-    const [actionType, setActionType] = useState<string>("add to cart")
-    const [mobileActionType, setMobileActionType] = useState<string>("add to cart")
     const [activeColor, setActiveColor] = useState<string>(() => {
         const attr = data.attributes?.find(attr => attr.name === "color")
         if (attr) {
@@ -66,25 +63,17 @@ const Product: React.FC<ProductProps> = ({ data, type, style }) => {
         }
         return ''
     })
-    const [openQuickShop, setOpenQuickShop] = useState<boolean>(false)
     const { currentCurrency } = useAppData()
     const { addToCart } = useCart();
     const { openModalCart } = useModalCartContext();
     const { addToWishlist, removeFromWishlist, wishlistState } = useWishlist();
     const { openModalWishlist } = useModalWishlistContext()
     const { openQuickview } = useModalQuickviewContext()
-    const isColorReq = data.attributes?.some(attr => attr.name.toLowerCase() === "color")
-    const isSizeReq = data.attributes?.some(attr => attr.name.toLowerCase() === "size")
     const router = useRouter()
 
     const sizeAttribute = data.attributes.find(item => item.name.toLowerCase() === "size")
     const colorAttribute = data.attributes.find(item => item.name.toLowerCase() === "color")
     const isInWishlist = wishlistState.wishlistArray.some(item => item.id.toString() === data.id.toString())
-
-    useEffect(() => {
-        if (data.attributes?.length > 1 || (data.attributes.some(attr => attr.name.toLowerCase().includes("size"))) && data.attributes?.length === 1) { setActionType("quick shop") };
-        if (data.attributes?.length > 0) { setMobileActionType("quick shop") };
-    }, [data.attributes]);
 
     useEffect(() => {
         if (data.attributes?.length > 0) {
@@ -137,25 +126,6 @@ const Product: React.FC<ProductProps> = ({ data, type, style }) => {
         }
     };
 
-    // This "smart" handler updates the size and ensures the selected color is still valid.
-    const handleActiveSize = (newSize: string) => {
-        setActiveSize(newSize);
-
-        // Find all colors that are available with the newly selected size
-        const availableColors = new Set(
-            variations
-                .filter(v => v.attributes.some(a => a.name.toLowerCase() === 'size' && a.option === newSize))
-                .map(v => v.attributes.find(a => a.name.toLowerCase() === 'color')?.option)
-                .filter((c): c is string => !!c)
-        );
-
-        // If the current color is not in the list of available colors for the new size,
-        // automatically switch to the first available color.
-        if (availableColors.size > 0 && !availableColors.has(activeColor)) {
-            setActiveColor(Array.from(availableColors)[0]);
-        }
-    };
-
     const handleAddToCart = async () => {
         // For products with no real WooCommerce variation behind the color/size chips (e.g. a
         // `simple` product carrying a purely descriptive Size attribute), there's nothing for
@@ -176,6 +146,16 @@ const Product: React.FC<ProductProps> = ({ data, type, style }) => {
             openModalCart();
         } else {
             toast.error(result.error || 'Could not add this item to your cart.');
+        }
+    };
+
+    // Products with attributes need color/size picked before they can be added to the
+    // cart, so send the shopper to the product page to choose instead of adding blind.
+    const handleAddToCartClick = () => {
+        if (data.attributes?.length > 0) {
+            router.push(`/product/${data.id}`);
+        } else {
+            handleAddToCart();
         }
     };
 
@@ -200,11 +180,7 @@ const Product: React.FC<ProductProps> = ({ data, type, style }) => {
 
     const isAddToCartDisabled =
         data.stock_status === "outofstock" ||
-        !data.purchasable ||
-        (isColorReq && !activeColor) ||
-        (isSizeReq && !activeSize);
-
-    const addToCartButtonText = data.stock_status === "outofstock" ? "Out Of Stock" : "Add To Cart";
+        !data.purchasable;
 
     const addToCartButtonClasses = isAddToCartDisabled
         ? "bg-surface text-secondary2 border"
@@ -304,85 +280,20 @@ const Product: React.FC<ProductProps> = ({ data, type, style }) => {
                                         </span>
                                     </div>
                                 )}
-                                {actionType === 'add to cart' ? (
-                                    <button
-                                        className={`add-cart-btn  w-full text-button-uppercase py-2 text-center rounded-md duration-500
-                                            ${addToCartButtonClasses} disabled:opacity-100 disabled:pointer-events-none
-                                             `}
-                                        disabled={isAddToCartDisabled}
-                                        onClick={e => {
-                                            e.stopPropagation();
-                                            handleAddToCart()
-                                        }}
-                                    >
-                                        <span className='text-[11px] lg:text-xs'>
-                                            Add To Cart
-                                        </span>
-                                    </button>
-                                ) : (
-                                    <>
-                                        <div
-                                            className="quick-shop-btn text-button-uppercase  py-2 text-center rounded-md align-center duration-500 bg-white hover:bg-black hover:text-white"
-                                            onClick={e => {
-                                                e.stopPropagation();
-                                                setOpenQuickShop(!openQuickShop)
-                                            }}
-                                        >
-                                            <span className='text-[11px] lg:text-xs'>
-                                                Quick Shop
-                                            </span>
-                                        </div>
-                                        <div
-                                            className={`quick-shop-block absolute left-5 right-5 bg-white p-5 rounded-[20px] ${openQuickShop ? 'open' : ''}`}
-                                            onClick={(e) => {
-                                                e.stopPropagation()
-                                            }}
-                                        >
-                                            {isSizeReq &&
-                                                <div className="list-size flex items-center  flex-wrap gap-2 border-b-line mb-2">
-                                                    <div >Size : </div>
-                                                    {sizeAttribute?.options.map((item: string, index: number) => (
-                                                        <div
-                                                            className={`size-item w-fit h-10 px-3 py-3 text-xs rounded-sm flex items-center justify-center text-button bg-white border border-line ${activeSize === item ? 'active' : ''}`}
-                                                            key={index}
-                                                            onClick={() => handleActiveSize(item)}
-                                                        >
-                                                            {item}
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            }
-                                            {isColorReq &&
-                                                <div className="list-size flex items-center  flex-wrap gap-2">
-                                                    <div >Color : </div>
-                                                    {colorAttribute?.options.map((item: string, index: number) => (
-                                                        <div
-                                                            className={`size-item w-fit h-10 text-xs overflow-ellipsis py-4 px-3 rounded-sm flex items-center justify-center text-button bg-white border border-line ${activeColor === item ? 'active' : ''}`}
-                                                            key={index}
-                                                            onClick={() => handleActiveColor(item)}
-                                                        >
-                                                            {item}
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            }
-                                            <button
-                                                type="button"
-                                                disabled={isAddToCartDisabled}
-                                                onClick={() => { handleAddToCart(); setOpenQuickShop(false) }}
-                                                className={`
-                                                    add-cart-btn w-full py-3 mt-2 items-center justify-center rounded-md
-                                                    text-sm font-medium transition-colors focus-visible:outline-none
-                                                    focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
-                                                    disabled:opacity-100 disabled:pointer-events-none
-                                                    ${addToCartButtonClasses}
-                                                `}
-                                            >
-                                                {addToCartButtonText}
-                                            </button>
-                                        </div>
-                                    </>
-                                )}
+                                <button
+                                    className={`add-cart-btn  w-full text-button-uppercase py-2 text-center rounded-md duration-500
+                                        ${addToCartButtonClasses} disabled:opacity-100 disabled:pointer-events-none
+                                         `}
+                                    disabled={isAddToCartDisabled}
+                                    onClick={e => {
+                                        e.stopPropagation();
+                                        handleAddToCartClick()
+                                    }}
+                                >
+                                    <span className='text-[11px] lg:text-xs'>
+                                        Add To Cart
+                                    </span>
+                                </button>
                             </div>
                         )}
                         {(style === 'style-2' || style === 'style-5') && (
@@ -395,40 +306,6 @@ const Product: React.FC<ProductProps> = ({ data, type, style }) => {
                                         handleAddToWishlist()
                                     }}
                                 />
-                                {style === 'style-5' && actionType !== 'add to cart' && (
-                                    <div
-                                        className={`quick-shop-block absolute left-5 right-5 bg-white p-5 rounded-[20px] ${openQuickShop ? 'open' : ''}`}
-                                        onClick={(e) => {
-                                            e.stopPropagation()
-                                        }}
-                                    >
-                                        <div className="list-size flex items-center justify-center flex-wrap gap-2">
-                                            {sizeAttribute?.options.map((item: string, index: number) => (
-                                                <div
-                                                    className={`size-item w-10 h-10 rounded-full flex items-center justify-center text-button bg-white border border-line ${activeSize === item ? 'active' : ''}`}
-                                                    key={index}
-                                                    onClick={() => handleActiveSize(item)}
-                                                >
-                                                    {item}
-                                                </div>
-                                            ))}
-                                        </div>
-                                        <button
-                                            type="button"
-                                            disabled={isAddToCartDisabled}
-                                            onClick={handleAddToCart}
-                                            className={`
-                                                button-main w-full inline-flex items-center justify-center rounded-md
-                                                text-sm font-medium transition-colors focus-visible:outline-none
-                                                focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
-                                                disabled:opacity-100 disabled:pointer-events-none
-                                                ${addToCartButtonClasses}
-                                            `}
-                                        >
-                                            {addToCartButtonText}
-                                        </button>
-                                    </div>
-                                )}
                             </div>
                         )}
                         <div className="list-action-icon flex items-center justify-center gap-2 absolute w-full bottom-3 z-[1] md:hidden">
@@ -445,11 +322,7 @@ const Product: React.FC<ProductProps> = ({ data, type, style }) => {
                                 className="add-cart-btn  w-9 h-9 flex items-center justify-center rounded-lg duration-300 bg-white hover:bg-black hover:text-white"
                                 onClick={e => {
                                     e.stopPropagation();
-                                    if (mobileActionType === 'quick shop') {
-                                        setOpenQuickShop(!openQuickShop)
-                                    } else {
-                                        handleAddToCart()
-                                    }
+                                    handleAddToCartClick()
                                 }}
                             >
                                 <Icon.ShoppingBagOpenIcon className='text-lg' />
@@ -523,76 +396,25 @@ const Product: React.FC<ProductProps> = ({ data, type, style }) => {
                         }
 
                         {style === 'style-5' &&
-                            (actionType === 'add to cart' ? (
-                                <button
-                                    type="button"
-                                    className={`add-cart-btn w-full text-button-uppercase py-2.5 text-center mt-2 rounded-full
-                                        duration-300 bg-white border border-black hover:bg-black hover:text-white max-lg:hidden
-                                        disabled:opacity-100 disabled:pointer-events-none
-                                        ${addToCartButtonClasses}`
-                                    }
-                                    disabled={isAddToCartDisabled}
-                                    onClick={e => {
-                                        e.stopPropagation()
-                                        handleAddToCart()
-                                    }}
-                                >
-                                    Add To Cart
-                                </button>
-                            ) : (
-                                <div
-                                    className="quick-shop-btn text-button-uppercase py-2.5 text-center mt-2 rounded-full duration-300 bg-white border border-black hover:bg-black hover:text-white max-lg:hidden"
-                                    onClick={e => {
-                                        e.stopPropagation()
-                                        setOpenQuickShop(!openQuickShop)
-                                    }}
-                                >
-                                    Quick Shop
-                                </div>
-                            ))
+                            <button
+                                type="button"
+                                className={`add-cart-btn w-full text-button-uppercase py-2.5 text-center mt-2 rounded-full
+                                    duration-300 bg-white border border-black hover:bg-black hover:text-white max-lg:hidden
+                                    disabled:opacity-100 disabled:pointer-events-none
+                                    ${addToCartButtonClasses}`
+                                }
+                                disabled={isAddToCartDisabled}
+                                onClick={e => {
+                                    e.stopPropagation()
+                                    handleAddToCartClick()
+                                }}
+                            >
+                                Add To Cart
+                            </button>
                         }
                     </div>
                 </div>
             </div>
-
-            <QuickShopDrawer open={openQuickShop} onClose={() => setOpenQuickShop(false)}>
-                {isSizeReq &&
-                    <div className="list-size flex items-center flex-wrap gap-2 border-b border-line pb-4 mb-4">
-                        <div>Size :</div>
-                        {sizeAttribute?.options.map((item: string, index: number) => (
-                            <button
-                                key={index}
-                                className={`size-item w-10 h-10 text-sm rounded-md flex items-center justify-center border ${activeSize === item ? 'bg-black text-white border-black' : 'bg-white border-line'}`}
-                                onClick={() => handleActiveSize(item)}
-                            >
-                                {item}
-                            </button>
-                        ))}
-                    </div>
-                }
-                {isColorReq &&
-                    <div className="list-color flex items-center flex-wrap gap-2">
-                        <div>Color :</div>
-                        {colorAttribute?.options.map((item: string, index: number) => (
-                            <button
-                                key={index}
-                                className={`color-item px-4 h-10 text-sm rounded-md flex items-center justify-center border ${activeColor === item ? 'bg-black text-white border-black' : 'bg-white border-line'}`}
-                                onClick={() => handleActiveColor(item)}
-                            >
-                                {item}
-                            </button>
-                        ))}
-                    </div>
-                }
-                <button
-                    type="button"
-                    disabled={isAddToCartDisabled}
-                    onClick={() => { handleAddToCart(); setOpenQuickShop(false) }}
-                    className={`w-full py-3 mt-5 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${addToCartButtonClasses}`}
-                >
-                    {addToCartButtonText}
-                </button>
-            </QuickShopDrawer>
         </>
     )
 }

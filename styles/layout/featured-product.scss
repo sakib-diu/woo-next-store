@@ -67,6 +67,8 @@
 .featured-product.cosmetic {
     .list-img {
         position: relative;
+        align-self: flex-start;
+        overflow: hidden;
     }
 
     .mySwiper {
@@ -77,12 +79,24 @@
             position: absolute;
             top: 20px;
             left: 20px;
+            bottom: 20px;
             flex-direction: column;
             gap: 12px;
             width: fit-content;
+            overflow-y: auto;
+            overflow-x: hidden;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+            mask-image: linear-gradient(to bottom, black 0%, black 60%, transparent 100%);
+            -webkit-mask-image: linear-gradient(to bottom, black 0%, black 60%, transparent 100%);
+
+            &::-webkit-scrollbar {
+                display: none;
+            }
 
             .swiper-slide {
                 width: 100px !important;
+                flex-shrink: 0;
                 border: 1px solid #A0A0A0;
                 border-radius: 12px;
                 overflow: hidden;
