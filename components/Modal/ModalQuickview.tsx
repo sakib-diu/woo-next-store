@@ -174,11 +174,22 @@ const ModalQuickview = () => {
         }
     };
 
+    // For products with no real WooCommerce variation behind the color/size chips (e.g. a
+    // `simple` product carrying a purely descriptive Size attribute), there's nothing for the
+    // Store API cart to record — this is only a display label for what was clicked.
+    const getDisplayAttributes = (cartVariation: VariationProduct | null) => {
+        if (cartVariation) return undefined
+        const attrs: { attribute: string; value: string }[] = []
+        if (activeColor) attrs.push({ attribute: 'Color', value: activeColor })
+        if (activeSize) attrs.push({ attribute: 'Size', value: activeSize })
+        return attrs.length > 0 ? attrs : undefined
+    }
+
     const handleAddToCart = async () => {
         if (!selectedProduct) return
 
         const cartVariation = findMatchingVariation()
-        const result = await addToCart(cartVariation ? cartVariation.id : selectedProduct.id, quantity)
+        const result = await addToCart(cartVariation ? cartVariation.id : selectedProduct.id, quantity, getDisplayAttributes(cartVariation))
 
         if (result.success) {
             openModalCart()
@@ -192,7 +203,7 @@ const ModalQuickview = () => {
         if (!selectedProduct) return
 
         const cartVariation = findMatchingVariation()
-        const result = await addToCart(cartVariation ? cartVariation.id : selectedProduct.id, quantity)
+        const result = await addToCart(cartVariation ? cartVariation.id : selectedProduct.id, quantity, getDisplayAttributes(cartVariation))
 
         if (result.success) {
             router.push("/checkout")

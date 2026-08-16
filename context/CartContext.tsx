@@ -15,6 +15,20 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 
 export type { StoreApiCartItem as CartItem } from '@/types/store-api-type';
 
+// Shape matches StoreApiCartItem['variation'] entries so callers can merge/render them uniformly.
+export interface DisplayAttribute {
+    attribute: string;
+    value: string;
+}
+
+// Some catalogs assign a non-variation attribute (e.g. "Size") to a `simple` WooCommerce
+// product just to list descriptive options, with no real per-value variation, price, or stock
+// behind it. WooCommerce's Store API correctly reflects that there's nothing to select —
+// `item.variation` is empty for these lines. This label map is a cosmetic-only, client-side
+// annotation of "what the shopper clicked" for display purposes; it never drives price, stock,
+// or cart-line identity — those stay entirely Store API-driven.
+const ITEM_LABELS_STORAGE_KEY = 'cartItemLabels';
+
 const EMPTY_CART: StoreApiCart = {
     items: [],
     coupons: [],
@@ -59,7 +73,9 @@ interface CartContextProps {
     mutatingKey: string | null;
     /** The most recent mutation's error, if any (e.g. "out of stock"). */
     error: string | null;
-    addToCart: (id: number, quantity: number) => Promise<MutationResult>;
+    /** Cosmetic-only "what was clicked" labels for cart lines with no real WooCommerce variation, keyed by item key. */
+    itemLabels: Record<string, DisplayAttribute[]>;
+    addToCart: (id: number, quantity: number, displayAttributes?: DisplayAttribute[]) => Promise<MutationResult>;
     updateCartItem: (key: string, quantity: number) => Promise<MutationResult>;
     removeFromCart: (key: string) => Promise<MutationResult>;
     applyCoupon: (code: string) => Promise<MutationResult>;
@@ -76,6 +92,16 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [isMutating, setIsMutating] = useState(false);
     const [mutatingKey, setMutatingKey] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [itemLabels, setItemLabels] = useState<Record<string, DisplayAttribute[]>>({});
+
+    useEffect(() => {
+        try {
+            const stored = localStorage.getItem(ITEM_LABELS_STORAGE_KEY);
+            if (stored) setItemLabels(JSON.parse(stored));
+        } catch {
+            // Cosmetic-only data — safe to ignore a corrupt/missing entry.
+        }
+    }, []);
 
     useEffect(() => {
         let cancelled = false;
@@ -93,8 +119,34 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
     }, []);
 
+    // Drop labels for lines that no longer exist in the cart (removed, or quantity dropped to 0).
+    // Skipped until the initial cart fetch resolves, since `cart.items` starts empty and would
+    // otherwise wipe every stored label before the real cart ever loads.
+    useEffect(() => {
+        if (isLoading) return;
+        setItemLabels((prev) => {
+            const liveKeys = new Set(cart.items.map((item) => item.key));
+            const next: Record<string, DisplayAttribute[]> = {};
+            let changed = false;
+            for (const key of Object.keys(prev)) {
+                if (liveKeys.has(key)) {
+                    next[key] = prev[key];
+                } else {
+                    changed = true;
+                }
+            }
+            if (!changed) return prev;
+            localStorage.setItem(ITEM_LABELS_STORAGE_KEY, JSON.stringify(next));
+            return next;
+        });
+    }, [cart.items, isLoading]);
+
     const runMutation = useCallback(
-        async (action: () => Promise<StoreApiResult>, key: string | null = null): Promise<MutationResult> => {
+        async (
+            action: () => Promise<StoreApiResult>,
+            key: string | null = null,
+            onSuccess?: (cart: StoreApiCart) => void
+        ): Promise<MutationResult> => {
             setIsMutating(true);
             setMutatingKey(key);
             setError(null);
@@ -103,6 +155,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             if (result.ok) {
                 setCart(result.cart);
+                onSuccess?.(result.cart);
             } else {
                 setError(result.error);
             }
@@ -116,7 +169,23 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
 
     const addToCart = useCallback(
-        (id: number, quantity: number) => runMutation(() => addCartItem(id, quantity)),
+        (id: number, quantity: number, displayAttributes?: DisplayAttribute[]) =>
+            runMutation(
+                () => addCartItem(id, quantity),
+                null,
+                (updatedCart) => {
+                    if (!displayAttributes || displayAttributes.length === 0) return;
+                    // Simple products carry no `variation` data of their own — attach the
+                    // cosmetic label to whichever line matches the id that was just added.
+                    const addedItem = updatedCart.items.find((item) => item.id === id && item.type !== 'variation');
+                    if (!addedItem) return;
+                    setItemLabels((prev) => {
+                        const next = { ...prev, [addedItem.key]: displayAttributes };
+                        localStorage.setItem(ITEM_LABELS_STORAGE_KEY, JSON.stringify(next));
+                        return next;
+                    });
+                }
+            ),
         [runMutation]
     );
 
@@ -157,6 +226,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 isMutating,
                 mutatingKey,
                 error,
+                itemLabels,
                 addToCart,
                 updateCartItem,
                 removeFromCart,

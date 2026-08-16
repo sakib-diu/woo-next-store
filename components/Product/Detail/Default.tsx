@@ -230,9 +230,20 @@ const Default: React.FC<Props> = ({ data, productId, variations, relatedProducts
         }
     };
 
+    // For products with no real WooCommerce variation behind the color/size chips (e.g. a
+    // `simple` product carrying a purely descriptive Size attribute), there's nothing for the
+    // Store API cart to record — this is only a display label for what the shopper clicked.
+    const getDisplayAttributes = (cartVariation: VariationProduct | null) => {
+        if (cartVariation) return undefined
+        const attrs: { attribute: string; value: string }[] = []
+        if (activeColor) attrs.push({ attribute: 'Color', value: activeColor })
+        if (activeSize) attrs.push({ attribute: 'Size', value: activeSize })
+        return attrs.length > 0 ? attrs : undefined
+    }
+
     const handleAddToCart = async () => {
         const cartVariation = findMatchingVariation()
-        const result = await addToCart(cartVariation ? cartVariation.id : data.id, quantity)
+        const result = await addToCart(cartVariation ? cartVariation.id : data.id, quantity, getDisplayAttributes(cartVariation))
 
         if (result.success) {
             openModalCart()
@@ -243,7 +254,7 @@ const Default: React.FC<Props> = ({ data, productId, variations, relatedProducts
 
     const handleBuyNow = async () => {
         const cartVariation = findMatchingVariation()
-        const result = await addToCart(cartVariation ? cartVariation.id : data.id, quantity)
+        const result = await addToCart(cartVariation ? cartVariation.id : data.id, quantity, getDisplayAttributes(cartVariation))
 
         if (result.success) {
             router.push("/checkout");

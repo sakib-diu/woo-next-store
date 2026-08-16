@@ -157,7 +157,20 @@ const Product: React.FC<ProductProps> = ({ data, type, style }) => {
     };
 
     const handleAddToCart = async () => {
-        const result = await addToCart(selectedVariation ? selectedVariation.id : data.id, 1);
+        // For products with no real WooCommerce variation behind the color/size chips (e.g. a
+        // `simple` product carrying a purely descriptive Size attribute), there's nothing for
+        // the Store API cart to record — this is only a display label for what was clicked.
+        const displayAttributes: { attribute: string; value: string }[] = []
+        if (!selectedVariation) {
+            if (activeColor) displayAttributes.push({ attribute: 'Color', value: activeColor })
+            if (activeSize) displayAttributes.push({ attribute: 'Size', value: activeSize })
+        }
+
+        const result = await addToCart(
+            selectedVariation ? selectedVariation.id : data.id,
+            1,
+            displayAttributes.length > 0 ? displayAttributes : undefined
+        );
 
         if (result.success) {
             openModalCart();

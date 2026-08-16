@@ -14,7 +14,7 @@ const ModalCart = () => {
     const [couponError, setCouponError] = useState<string | null>(null)
     const [isApplyingCoupon, setIsApplyingCoupon] = useState(false)
     const { isModalOpen, closeModalCart } = useModalCartContext();
-    const { cart, isLoading, isMutating, mutatingKey, removeFromCart, applyCoupon, removeCoupon } = useCart()
+    const { cart, isLoading, isMutating, mutatingKey, itemLabels, removeFromCart, applyCoupon, removeCoupon } = useCart()
 
     const handleActiveTab = (tab: string) => {
         setActiveTab(tab)
@@ -95,7 +95,7 @@ const ModalCart = () => {
                                                 </div>
                                                 <div className="flex items-center justify-between gap-2 mt-3 w-full">
                                                     <div className="flex items-center gap-1 text-secondary2 capitalize">
-                                                        {item.variation.map((attr, i) => (
+                                                        {(item.variation.length > 0 ? item.variation : itemLabels[item.key] || []).map((attr, i) => (
                                                             <span key={attr.attribute}>
                                                                 {i > 0 ? '/' : ''}{attr.value}
                                                             </span>

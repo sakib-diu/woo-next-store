@@ -10,7 +10,7 @@ import { PATH } from '../../constant/pathConstants'
 
 const CartClient = () => {
     const router = useRouter()
-    const { cart, isLoading, isMutating, mutatingKey, updateCartItem, removeFromCart, applyCoupon, removeCoupon } = useCart();
+    const { cart, isLoading, isMutating, mutatingKey, itemLabels, updateCartItem, removeFromCart, applyCoupon, removeCoupon } = useCart();
     const [discountCode, setDiscountCode] = useState<string>('');
     const [isApplyingCoupon, setIsApplyingCoupon] = useState<boolean>(false);
     const [couponError, setCouponError] = useState<string | null>(null);
@@ -102,7 +102,7 @@ const CartClient = () => {
                                                         <div>
                                                             <div className="text-title">{decodeHtmlEntities(item.name)}</div>
                                                             <div className="list-select mt-3">
-                                                                {item.variation.map((attr) => (
+                                                                {(item.variation.length > 0 ? item.variation : itemLabels[item.key] || []).map((attr) => (
                                                                     <div key={attr.attribute} className="text-secondary text-sm">
                                                                         <span className="font-bold">{attr.attribute}:</span> {attr.value}
                                                                     </div>

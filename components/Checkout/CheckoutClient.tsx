@@ -62,7 +62,7 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
 }) => {
     const { openModalCart } = useModalCartContext()
     const { currentCurrency } = useAppData()
-    const { cart, clearCart, applyCoupon, removeCoupon, isMutating } = useCart();
+    const { cart, clearCart, applyCoupon, removeCoupon, isMutating, itemLabels } = useCart();
     const [totalCart, setTotalCart] = useState<number>(0)
     const [selectedCountry, setSelectedCountry] = useState<string>('')
     const [selectedState, setSelectedState] = useState<string>('')
@@ -353,7 +353,7 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
                     key: 'product_image',
                     value: item.images[0]?.src || ''
                 },
-                ...item.variation.map((attr, i) => ({
+                ...(item.variation.length > 0 ? item.variation : itemLabels[item.key] || []).map((attr, i) => ({
                     id: i + 1,
                     key: attr.attribute,
                     value: attr.value,
