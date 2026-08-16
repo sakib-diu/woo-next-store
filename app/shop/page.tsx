@@ -14,7 +14,7 @@ const PRODUCTS_PER_PAGE = 9;
 
 type ShopSearchParams = {
     type?: string;
-    gender?: string;
+    audience?: string;
     category?: string;
     page?: string;
     sort?: string;
@@ -45,7 +45,7 @@ const findIdBySlug = (items: { id: number; slug: string }[], slug: string | null
 
 export default async function BreadCrumb1({ searchParams }: BreadCrumb1Props) {
     const params = await searchParams;
-    const { type, gender, category, sort, size, color, brand, min_price, max_price, sale } = params;
+    const { type, audience, category, sort, size, color, brand, min_price, max_price, sale } = params;
     const page = Math.max(1, parseInt(params.page ?? '1', 10) || 1);
 
     const [categories, tags, brands, attributesWithTerms] = await Promise.all([
@@ -55,7 +55,7 @@ export default async function BreadCrumb1({ searchParams }: BreadCrumb1Props) {
         getAttributesWithTerms(),
     ]);
 
-    // `gender` selects a top-level (parent === 0) category — the catalog's audience split
+    // `audience` selects a top-level (parent === 0) category — the catalog's audience split
     // (Men/Women/Kids/Unisex/Baby & Toddler). `category` selects a "product type" facet
     // (e.g. "Shoes"), which in this catalog exists as a *separate* subcategory per audience
     // (shoes, shoes-men, shoes-women, ...) — so it's matched by grouping subcategories with
@@ -63,14 +63,14 @@ export default async function BreadCrumb1({ searchParams }: BreadCrumb1Props) {
     // WooCommerce's `category` param treats a comma-separated list as OR, not AND, so combining
     // an audience with a product-type group is a broader match than the two applied strictly
     // together — acceptable since there's no way to express AND in a single REST call.
-    const genderId = findIdBySlug(categories as CategorieType[], gender);
+    const audienceId = findIdBySlug(categories as CategorieType[], audience);
     const typeCategoryIds = category
         ? (categories as CategorieType[])
             .filter(cat => cat.parent !== 0 && slugifyKey(cat.name) === category.toLowerCase())
             .map(cat => cat.id)
         : [];
     const categoryIds = [
-        ...(genderId !== undefined ? [genderId] : []),
+        ...(audienceId !== undefined ? [audienceId] : []),
         ...typeCategoryIds,
     ];
 

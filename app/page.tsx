@@ -6,9 +6,10 @@ import Benefit from '@/components/Home/Benefit'
 import Brand from '@/components/Home/Brand'
 import Collection from '@/components/Home/Collection'
 import Instagram from '@/components/Home/Instagram'
+import Testimonial from '@/components/Home/Testimonial'
 import TabFeatures from '@/components/Home/TabFeatures'
 import WhatNewOne from '@/components/Home/WhatNewOne'
-// import ModalNewsletter from '@/components/Modal/ModalNewsletter'
+import ModalNewsletter from '@/components/Modal/ModalNewsletter'
 import TopNavOne from '@/components/Header/TopNav/TopNavOne'
 import SliderTwo from '@/components/Slider/SliderTwo'
 import { Metadata } from 'next'
@@ -67,11 +68,12 @@ export default async function HomeTwo() {
       <Banner />
       <TabFeatures data={products} start={0} limit={8} />
       <Benefit props="md:mt-20 mt-10 py-10 px-2.5 bg-surface rounded-3xl" />
-      {/* <Instagram /> */}
+      <Testimonial />
+      <Instagram />
       <Brand />
       <Footer />
       {/* Black Friday Pop Up Modal */}
-      {/* <ModalNewsletter /> */}
+      <ModalNewsletter data={products} />
     </>
   )
 }

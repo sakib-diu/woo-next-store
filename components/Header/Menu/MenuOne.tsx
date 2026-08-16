@@ -71,8 +71,8 @@ const MenuOne: React.FC<Props> = ({ props, categories }) => {
         };
     }, [lastScrollPosition]);
 
-    const handleGenderClick = (gender: string) => {
-        router.push(`${PATH.SHOP}?gender=${gender}`);
+    const handleAudienceClick = (audience: string) => {
+        router.push(`${PATH.SHOP}?audience=${audience}`);
     };
 
     const handleCategoryClick = (category: string) => {
@@ -118,7 +118,7 @@ const MenuOne: React.FC<Props> = ({ props, categories }) => {
                                             <div className="container">
                                                 <div className="flex justify-evenly py-8 w-ful">
                                                     <div className="nav-link basis-2/3 grid grid-cols-4 gap-y-8">
-                                                        {menuItems && menuItems.map((menuItem, index) => (
+                                                        {menuItems && menuItems.map((menuItem) => (
                                                             <>
                                                                 {menuItem.subMenu && menuItem.subMenu.length > 0 && (
                                                                     <div key={menuItem.id} className="nav-item justify-evenly" >
@@ -127,39 +127,22 @@ const MenuOne: React.FC<Props> = ({ props, categories }) => {
                                                                             {menuItem.subMenu?.slice(0, 5)?.map((subMenu) => (
                                                                                 <li key={subMenu.id}>
                                                                                     <Link
-                                                                                        href={`${PATH.SHOP}?category=${subMenu.slug}` + (subMenu.slug.split("_").includes("gender") ? `&gender=${subMenu.slug.split("_").reverse()[0]}` : '')}
+                                                                                        href={`${PATH.SHOP}?audience=${menuItem.slug}&category=${subMenu.categoryKey}`}
                                                                                         className={`link text-secondary duration-300 cursor-pointer`}
                                                                                     >
                                                                                         {subMenu.name}
                                                                                     </Link>
                                                                                 </li>
                                                                             ))}
-                                                                            {/* {menuItem.subMenu.length > 5 && ( */}
-                                                                            <>
-                                                                                {menuItem.isGenderCat ?
-                                                                                    (
-                                                                                        <li className='text-secondary cursor-pointer'>
-                                                                                            <Link
-                                                                                                href={`${PATH.SHOP}?gender=${menuItem.genderCategory}`}
-                                                                                                className={`link text-secondary duration-300 cursor-pointer view-all-btn`}
-                                                                                                prefetch
-                                                                                            >
-                                                                                                View All
-                                                                                            </Link>
-                                                                                        </li>
-                                                                                    ) : (
-                                                                                        <li className='text-secondary cursor-pointer'>
-                                                                                            <Link
-                                                                                                href={`${PATH.SHOP}?category=${menuItem.slug}`}
-                                                                                                className={`link text-secondary duration-300 cursor-pointer view-all-btn`}
-                                                                                                prefetch
-                                                                                            >
-                                                                                                View All
-                                                                                            </Link>
-                                                                                        </li>
-                                                                                    )}
-                                                                            </>
-                                                                            {/* )} */}
+                                                                            <li className='text-secondary cursor-pointer'>
+                                                                                <Link
+                                                                                    href={`${PATH.SHOP}?audience=${menuItem.slug}`}
+                                                                                    className={`link text-secondary duration-300 cursor-pointer view-all-btn`}
+                                                                                    prefetch
+                                                                                >
+                                                                                    View All
+                                                                                </Link>
+                                                                            </li>
                                                                         </ul>
                                                                     </div>
                                                                 )}
@@ -277,7 +260,7 @@ const MenuOne: React.FC<Props> = ({ props, categories }) => {
                                             </div>
                                             <div className="list-nav-item w-full pt-3 pb-12">
                                                 <div className="nav-link grid grid-cols-2 gap-5 gap-y-6">
-                                                    {menuItems && menuItems.sort((a, b) => (b.subMenu?.length || 0) - (a.subMenu?.length || 0)).map((menuItem) => (
+                                                    {menuItems && [...menuItems].sort((a, b) => (b.subMenu?.length || 0) - (a.subMenu?.length || 0)).map((menuItem) => (
                                                         <>
                                                             {menuItem.subMenu && menuItem.subMenu.length > 0 && (
                                                                 <div key={menuItem.id} className="nav-item">
@@ -286,32 +269,21 @@ const MenuOne: React.FC<Props> = ({ props, categories }) => {
                                                                         {menuItem.subMenu?.map((subMenuItem) => (
                                                                             <li key={subMenuItem.id}>
                                                                                 <Link
-                                                                                    href={`${PATH.SHOP}?category=${subMenuItem.slug}` + (menuItem.isGenderCat ? `&gender=${menuItem.genderCategory}` : '')}
+                                                                                    href={`${PATH.SHOP}?audience=${menuItem.slug}&category=${subMenuItem.categoryKey}`}
                                                                                     className={`link text-secondary duration-300 cursor-pointer`}
                                                                                 >
                                                                                     {subMenuItem.name}
                                                                                 </Link>
                                                                             </li>
                                                                         ))}
-                                                                        {menuItem.isGenderCat ? (
-                                                                            <li>
-                                                                                <Link
-                                                                                    href={`${PATH.SHOP}?gender=${menuItem.genderCategory}`}
-                                                                                    className={`link text-secondary duration-300 view-all-btn`}
-                                                                                >
-                                                                                    View All
-                                                                                </Link>
-                                                                            </li>
-                                                                        ) : (
-                                                                            <li>
-                                                                                <Link
-                                                                                    href={`${PATH.SHOP}?category=${menuItem.slug}`}
-                                                                                    className={`link text-secondary duration-300 view-all-btn`}
-                                                                                >
-                                                                                    View All
-                                                                                </Link>
-                                                                            </li>
-                                                                        )}
+                                                                        <li>
+                                                                            <Link
+                                                                                href={`${PATH.SHOP}?audience=${menuItem.slug}`}
+                                                                                className={`link text-secondary duration-300 view-all-btn`}
+                                                                            >
+                                                                                View All
+                                                                            </Link>
+                                                                        </li>
                                                                     </ul>
                                                                 </div>
                                                             )}

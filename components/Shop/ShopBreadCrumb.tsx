@@ -31,7 +31,7 @@ const ShopBreadCrumb1: React.FC<Props> = ({ products, totalItems, totalPages, cu
 
     const selectedType = searchParams.get('type');
     const selectedCategory = searchParams.get('category');
-    const selectedGender = searchParams.get('gender');
+    const selectedAudience = searchParams.get('audience');
     const selectedSize = searchParams.get('size');
     const selectedColor = searchParams.get('color');
     const selectedBrands = (searchParams.get('brand') ?? '').split(',').map(b => b.trim()).filter(Boolean);
@@ -49,11 +49,11 @@ const ShopBreadCrumb1: React.FC<Props> = ({ products, totalItems, totalPages, cu
     const isPriceFiltered = priceRange.min !== DEFAULT_PRICE_RANGE.min || priceRange.max !== DEFAULT_PRICE_RANGE.max;
 
     const hasActiveFilters = Boolean(
-        selectedType || selectedCategory || selectedGender || selectedSize || selectedColor ||
+        selectedType || selectedCategory || selectedAudience || selectedSize || selectedColor ||
         selectedBrands.length || isPriceFiltered || showOnlySaleParam
     );
     const activeFilterCount = [
-        Boolean(selectedType), Boolean(selectedCategory), Boolean(selectedGender), Boolean(selectedSize),
+        Boolean(selectedType), Boolean(selectedCategory), Boolean(selectedAudience), Boolean(selectedSize),
         Boolean(selectedColor), selectedBrands.length > 0, isPriceFiltered, showOnlySaleParam,
     ].filter(Boolean).length;
 
@@ -116,8 +116,8 @@ const ShopBreadCrumb1: React.FC<Props> = ({ products, totalItems, totalPages, cu
         updateParams({ category: selectedCategory === cat ? null : cat });
     };
 
-    const handleGender = (slug: string) => {
-        updateParams({ gender: selectedGender === slug ? null : slug });
+    const handleAudience = (slug: string) => {
+        updateParams({ audience: selectedAudience === slug ? null : slug });
     };
 
     const handleSize = (size: string) => {
@@ -211,10 +211,10 @@ const ShopBreadCrumb1: React.FC<Props> = ({ products, totalItems, totalPages, cu
     const selectedTypeGroup = selectedCategory
         ? productTypeGroups.find(g => g.key === selectedCategory.toLowerCase())
         : undefined;
-    const selectedGenderCategory = selectedGender
-        ? categories.find(c => c.slug.toLowerCase() === selectedGender.toLowerCase())
+    const selectedAudienceCategory = selectedAudience
+        ? categories.find(c => c.slug.toLowerCase() === selectedAudience.toLowerCase())
         : undefined;
-    const pageHeading = decodeEntities(selectedTypeGroup?.name ?? selectedGenderCategory?.name ?? 'Shop');
+    const pageHeading = decodeEntities(selectedTypeGroup?.name ?? selectedAudienceCategory?.name ?? 'Shop');
 
     // Options with zero matching products are hidden across the board — a facet that always
     // leads to the empty state isn't useful to show as selectable.
@@ -255,9 +255,9 @@ const ShopBreadCrumb1: React.FC<Props> = ({ products, totalItems, totalPages, cu
                         <button
                             type="button"
                             key={index}
-                            className={`item flex items-center justify-between w-full text-left cursor-pointer ${selectedGender?.toLowerCase() === item.slug.toLowerCase() ? 'active' : ''}`}
-                            onClick={() => handleGender(item.slug.toLowerCase())}
-                            aria-pressed={selectedGender?.toLowerCase() === item.slug.toLowerCase()}
+                            className={`item flex items-center justify-between w-full text-left cursor-pointer ${selectedAudience?.toLowerCase() === item.slug.toLowerCase() ? 'active' : ''}`}
+                            onClick={() => handleAudience(item.slug.toLowerCase())}
+                            aria-pressed={selectedAudience?.toLowerCase() === item.slug.toLowerCase()}
                         >
                             <div className='text-secondary has-line-before hover:text-black capitalize'>{decodeEntities(item.name)}</div>
                             <div className='text-secondary2'>
@@ -401,9 +401,9 @@ const ShopBreadCrumb1: React.FC<Props> = ({ products, totalItems, totalPages, cu
                                     <button
                                         type="button"
                                         key={index}
-                                        className={`tab-item text-button-uppercase cursor-pointer has-line-before line-2px ${selectedGender?.toLowerCase() === item.slug.toLowerCase() ? 'active' : ''}`}
-                                        onClick={() => handleGender(item.slug.toLowerCase())}
-                                        aria-pressed={selectedGender?.toLowerCase() === item.slug.toLowerCase()}
+                                        className={`tab-item text-button-uppercase cursor-pointer has-line-before line-2px ${selectedAudience?.toLowerCase() === item.slug.toLowerCase() ? 'active' : ''}`}
+                                        onClick={() => handleAudience(item.slug.toLowerCase())}
+                                        aria-pressed={selectedAudience?.toLowerCase() === item.slug.toLowerCase()}
                                     >
                                         {decodeEntities(item.name)}
                                     </button>
@@ -492,10 +492,10 @@ const ShopBreadCrumb1: React.FC<Props> = ({ products, totalItems, totalPages, cu
                                                         <span>{decodeEntities(tags.find(tag => tag.slug.toLowerCase() === selectedType.toLowerCase())?.name ?? selectedType)}</span>
                                                     </button>
                                                 )}
-                                                {selectedGender && (
-                                                    <button type="button" className="item flex items-center px-2 py-1 gap-1 bg-linear rounded-full capitalize" onClick={() => handleGender(selectedGender)}>
+                                                {selectedAudience && (
+                                                    <button type="button" className="item flex items-center px-2 py-1 gap-1 bg-linear rounded-full capitalize" onClick={() => handleAudience(selectedAudience)}>
                                                         <Icon.X className='cursor-pointer' />
-                                                        <span>{decodeEntities(selectedGenderCategory?.name ?? selectedGender)}</span>
+                                                        <span>{decodeEntities(selectedAudienceCategory?.name ?? selectedAudience)}</span>
                                                     </button>
                                                 )}
                                                 {selectedCategory && (

@@ -46,8 +46,8 @@ const Footer = () => {
                                     </div>
                                     <div className="item flex flex-col basis-1/3 ">
                                         <div className="text-button-uppercase pb-3">Quick Shop</div>
-                                        <Link className='caption1 has-line-before duration-300 w-fit' href={`${PATH.SHOP}?gender=women`}>Women</Link>
-                                        <Link className='caption1 has-line-before duration-300 w-fit pt-2' href={`${PATH.SHOP}?gender=men`}>Men</Link>
+                                        <Link className='caption1 has-line-before duration-300 w-fit' href={`${PATH.SHOP}?audience=women`}>Women</Link>
+                                        <Link className='caption1 has-line-before duration-300 w-fit pt-2' href={`${PATH.SHOP}?audience=men`}>Men</Link>
                                         <Link className='caption1 has-line-before duration-300 w-fit pt-2' href={`${PATH.SHOP}?category=first_order_fashion`}>Clothes</Link>
                                         <Link className='caption1 has-line-before duration-300 w-fit pt-2' href={`${PATH.SHOP}?category=second_order_fahion_common_accessories`}>Accessories</Link>
                                     </div>
