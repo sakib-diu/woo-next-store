@@ -64,6 +64,8 @@ const Default: React.FC<Props> = ({ data, productId, variations, relatedProducts
     const [selectedVariation, setSelectedVariation] = useState<VariationProduct | null>(() => {
         return null
     })
+    const [isAddingToCart, setIsAddingToCart] = useState(false)
+    const [isBuyingNow, setIsBuyingNow] = useState(false)
     const { currentCurrency } = useAppData()
     const { openModalCart } = useModalCartContext()
     const { addToCart } = useCart();
@@ -242,24 +244,34 @@ const Default: React.FC<Props> = ({ data, productId, variations, relatedProducts
     }
 
     const handleAddToCart = async () => {
-        const cartVariation = findMatchingVariation()
-        const result = await addToCart(cartVariation ? cartVariation.id : data.id, quantity, getDisplayAttributes(cartVariation))
+        setIsAddingToCart(true)
+        try {
+            const cartVariation = findMatchingVariation()
+            const result = await addToCart(cartVariation ? cartVariation.id : data.id, quantity, getDisplayAttributes(cartVariation))
 
-        if (result.success) {
-            openModalCart()
-        } else {
-            toast.error(result.error || 'Could not add this item to your cart.')
+            if (result.success) {
+                openModalCart()
+            } else {
+                toast.error(result.error || 'Could not add this item to your cart.')
+            }
+        } finally {
+            setIsAddingToCart(false)
         }
     };
 
     const handleBuyNow = async () => {
-        const cartVariation = findMatchingVariation()
-        const result = await addToCart(cartVariation ? cartVariation.id : data.id, quantity, getDisplayAttributes(cartVariation))
+        setIsBuyingNow(true)
+        try {
+            const cartVariation = findMatchingVariation()
+            const result = await addToCart(cartVariation ? cartVariation.id : data.id, quantity, getDisplayAttributes(cartVariation))
 
-        if (result.success) {
-            router.push("/checkout");
-        } else {
-            toast.error(result.error || 'Could not add this item to your cart.')
+            if (result.success) {
+                router.push("/checkout");
+            } else {
+                toast.error(result.error || 'Could not add this item to your cart.')
+            }
+        } finally {
+            setIsBuyingNow(false)
         }
     };
 
@@ -492,28 +504,38 @@ const Default: React.FC<Props> = ({ data, productId, variations, relatedProducts
 
                                     <button
                                         type="button"
-                                        disabled={data.stock_status === "outofstock" || (isColorReq && activeColor.length === 0) || (isSizeReq && activeSize.length === 0)}
+                                        disabled={data.stock_status === "outofstock" || isAddingToCart || isBuyingNow || (isColorReq && activeColor.length === 0) || (isSizeReq && activeSize.length === 0)}
                                         onClick={handleAddToCart}
                                         className={`button-main w-full inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-100 disabled:pointer-events-none ${data.stock_status === "outofstock" || data.stock_quantity === 0 || !data.purchasable || (isColorReq && activeColor.length === 0) || (isSizeReq && activeSize.length === 0)
                                             ? "bg-surface text-secondary2 border"
                                             : "bg-black text-white hover:bg-green-300"
                                             }`}
                                     >
-                                        {data.stock_status === "outofstock" || data.stock_quantity === 0 ? "Out Of Stock" : "Add To Cart"}
+                                        {isAddingToCart ? (
+                                            <span className='flex items-center justify-center gap-2'>
+                                                <Icon.CircleNotchIcon className='animate-spin' size={16} />
+                                                Adding...
+                                            </span>
+                                        ) : (data.stock_status === "outofstock" || data.stock_quantity === 0 ? "Out Of Stock" : "Add To Cart")}
                                     </button>
 
                                 </div>
                                 <div className="button-block mt-5">
                                     <button
                                         type="button"
-                                        disabled={data.stock_status === "outofstock" || (isColorReq && activeColor.length === 0) || (isSizeReq && activeSize.length === 0)}
+                                        disabled={data.stock_status === "outofstock" || isAddingToCart || isBuyingNow || (isColorReq && activeColor.length === 0) || (isSizeReq && activeSize.length === 0)}
                                         onClick={handleBuyNow}
                                         className={`button-main w-full inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-100 disabled:pointer-events-none ${data.stock_status === "outofstock" || data.stock_quantity === 0 || !data.purchasable || (isColorReq && activeColor.length === 0) || (isSizeReq && activeSize.length === 0)
                                             ? "bg-surface text-secondary2 border"
                                             : "bg-black text-white hover:bg-green-300"
                                             }`}
                                     >
-                                        {data.stock_status === "outofstock" || data.stock_quantity === 0 ? "Out Of Stock" : "Buy It Now"}
+                                        {isBuyingNow ? (
+                                            <span className='flex items-center justify-center gap-2'>
+                                                <Icon.CircleNotchIcon className='animate-spin' size={16} />
+                                                Processing...
+                                            </span>
+                                        ) : (data.stock_status === "outofstock" || data.stock_quantity === 0 ? "Out Of Stock" : "Buy It Now")}
                                     </button>
                                 </div>
                                 <div className="flex items-center lg:gap-20 gap-8 mt-5 pb-6 border-b border-line">

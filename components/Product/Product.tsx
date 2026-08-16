@@ -63,6 +63,7 @@ const Product: React.FC<ProductProps> = ({ data, type, style }) => {
         }
         return ''
     })
+    const [isAddingToCart, setIsAddingToCart] = useState(false)
     const { currentCurrency } = useAppData()
     const { addToCart } = useCart();
     const { openModalCart } = useModalCartContext();
@@ -136,22 +137,28 @@ const Product: React.FC<ProductProps> = ({ data, type, style }) => {
             if (activeSize) displayAttributes.push({ attribute: 'Size', value: activeSize })
         }
 
-        const result = await addToCart(
-            selectedVariation ? selectedVariation.id : data.id,
-            1,
-            displayAttributes.length > 0 ? displayAttributes : undefined
-        );
+        setIsAddingToCart(true);
+        try {
+            const result = await addToCart(
+                selectedVariation ? selectedVariation.id : data.id,
+                1,
+                displayAttributes.length > 0 ? displayAttributes : undefined
+            );
 
-        if (result.success) {
-            openModalCart();
-        } else {
-            toast.error(result.error || 'Could not add this item to your cart.');
+            if (result.success) {
+                openModalCart();
+            } else {
+                toast.error(result.error || 'Could not add this item to your cart.');
+            }
+        } finally {
+            setIsAddingToCart(false);
         }
     };
 
     // Products with attributes need color/size picked before they can be added to the
     // cart, so send the shopper to the product page to choose instead of adding blind.
     const handleAddToCartClick = () => {
+        if (isAddingToCart) return;
         if (data.attributes?.length > 0) {
             router.push(`/product/${data.id}`);
         } else {
@@ -284,14 +291,15 @@ const Product: React.FC<ProductProps> = ({ data, type, style }) => {
                                     className={`add-cart-btn  w-full text-button-uppercase py-2 text-center rounded-md duration-500
                                         ${addToCartButtonClasses} disabled:opacity-100 disabled:pointer-events-none
                                          `}
-                                    disabled={isAddToCartDisabled}
+                                    disabled={isAddToCartDisabled || isAddingToCart}
                                     onClick={e => {
                                         e.stopPropagation();
                                         handleAddToCartClick()
                                     }}
                                 >
-                                    <span className='text-[11px] lg:text-xs'>
-                                        Add To Cart
+                                    <span className='text-[11px] lg:text-xs flex items-center justify-center gap-1'>
+                                        {isAddingToCart && <Icon.CircleNotchIcon className='animate-spin' size={12} />}
+                                        {isAddingToCart ? 'Adding...' : 'Add To Cart'}
                                     </span>
                                 </button>
                             </div>
@@ -319,13 +327,17 @@ const Product: React.FC<ProductProps> = ({ data, type, style }) => {
                                 <Icon.EyeIcon className='text-lg' />
                             </div>
                             <div
-                                className="add-cart-btn  w-9 h-9 flex items-center justify-center rounded-lg duration-300 bg-white hover:bg-black hover:text-white"
+                                className={`add-cart-btn  w-9 h-9 flex items-center justify-center rounded-lg duration-300 bg-white hover:bg-black hover:text-white ${isAddingToCart ? 'opacity-50 pointer-events-none' : ''}`}
                                 onClick={e => {
                                     e.stopPropagation();
                                     handleAddToCartClick()
                                 }}
                             >
-                                <Icon.ShoppingBagOpenIcon className='text-lg' />
+                                {isAddingToCart ? (
+                                    <Icon.CircleNotchIcon className='text-lg animate-spin' />
+                                ) : (
+                                    <Icon.ShoppingBagOpenIcon className='text-lg' />
+                                )}
                             </div>
                         </div>
                     </div>
@@ -403,13 +415,16 @@ const Product: React.FC<ProductProps> = ({ data, type, style }) => {
                                     disabled:opacity-100 disabled:pointer-events-none
                                     ${addToCartButtonClasses}`
                                 }
-                                disabled={isAddToCartDisabled}
+                                disabled={isAddToCartDisabled || isAddingToCart}
                                 onClick={e => {
                                     e.stopPropagation()
                                     handleAddToCartClick()
                                 }}
                             >
-                                Add To Cart
+                                <span className='flex items-center justify-center gap-1'>
+                                    {isAddingToCart && <Icon.CircleNotchIcon className='animate-spin' size={14} />}
+                                    {isAddingToCart ? 'Adding...' : 'Add To Cart'}
+                                </span>
                             </button>
                         }
                     </div>

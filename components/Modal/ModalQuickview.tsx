@@ -34,6 +34,8 @@ const ModalQuickview = () => {
     const [activeSize, setActiveSize] = useState<string>('')
     const [quantity, setQuantity] = useState(1)
     const [selectedVariation, setSelectedVariation] = useState<VariationProduct | null>(null)
+    const [isAddingToCart, setIsAddingToCart] = useState(false)
+    const [isBuyingNow, setIsBuyingNow] = useState(false)
     const { currentCurrency } = useAppData()
     const { addToCart } = useCart()
     const { openModalCart } = useModalCartContext()
@@ -188,28 +190,38 @@ const ModalQuickview = () => {
     const handleAddToCart = async () => {
         if (!selectedProduct) return
 
-        const cartVariation = findMatchingVariation()
-        const result = await addToCart(cartVariation ? cartVariation.id : selectedProduct.id, quantity, getDisplayAttributes(cartVariation))
+        setIsAddingToCart(true)
+        try {
+            const cartVariation = findMatchingVariation()
+            const result = await addToCart(cartVariation ? cartVariation.id : selectedProduct.id, quantity, getDisplayAttributes(cartVariation))
 
-        if (result.success) {
-            openModalCart()
-            closeQuickview()
-        } else {
-            toast.error(result.error || 'Could not add this item to your cart.')
+            if (result.success) {
+                openModalCart()
+                closeQuickview()
+            } else {
+                toast.error(result.error || 'Could not add this item to your cart.')
+            }
+        } finally {
+            setIsAddingToCart(false)
         }
     };
 
     const handleBuyNow = async () => {
         if (!selectedProduct) return
 
-        const cartVariation = findMatchingVariation()
-        const result = await addToCart(cartVariation ? cartVariation.id : selectedProduct.id, quantity, getDisplayAttributes(cartVariation))
+        setIsBuyingNow(true)
+        try {
+            const cartVariation = findMatchingVariation()
+            const result = await addToCart(cartVariation ? cartVariation.id : selectedProduct.id, quantity, getDisplayAttributes(cartVariation))
 
-        if (result.success) {
-            router.push("/checkout")
-            closeQuickview()
-        } else {
-            toast.error(result.error || 'Could not add this item to your cart.')
+            if (result.success) {
+                router.push("/checkout")
+                closeQuickview()
+            } else {
+                toast.error(result.error || 'Could not add this item to your cart.')
+            }
+        } finally {
+            setIsBuyingNow(false)
         }
     }
 
@@ -395,27 +407,37 @@ const ModalQuickview = () => {
                                         </div>
                                         <button
                                             type="button"
-                                            disabled={isLoadingVariations || selectedProduct?.stock_status === "outofstock" || (isColorReq && activeColor.length === 0) || (isSizeReq && activeSize.length === 0)}
+                                            disabled={isLoadingVariations || isAddingToCart || isBuyingNow || selectedProduct?.stock_status === "outofstock" || (isColorReq && activeColor.length === 0) || (isSizeReq && activeSize.length === 0)}
                                             onClick={handleAddToCart}
                                             className={`button-main w-full text-center ${isLoadingVariations || selectedProduct?.stock_status === "outofstock" || selectedProduct?.stock_quantity === 0 || !selectedProduct?.purchasable || (isColorReq && activeColor.length === 0) || (isSizeReq && activeSize.length === 0)
                                                 ? "bg-surface text-secondary2 border"
                                                 : "bg-white text-black border border-black"
                                                 }`}
                                         >
-                                            {isLoadingVariations ? "Loading..." : (selectedProduct?.stock_status === "outofstock" || selectedProduct?.stock_quantity === 0 ? "Out Of Stock" : "Add To Cart")}
+                                            {isAddingToCart ? (
+                                                <span className='flex items-center justify-center gap-2'>
+                                                    <Icon.CircleNotch className='animate-spin' size={16} />
+                                                    Adding...
+                                                </span>
+                                            ) : isLoadingVariations ? "Loading..." : (selectedProduct?.stock_status === "outofstock" || selectedProduct?.stock_quantity === 0 ? "Out Of Stock" : "Add To Cart")}
                                         </button>
                                     </div>
                                     <div className="button-block mt-5">
                                         <button
                                             onClick={handleBuyNow}
                                             type="button"
-                                            disabled={isLoadingVariations || selectedProduct?.stock_status === "outofstock" || (isColorReq && activeColor.length === 0) || (isSizeReq && activeSize.length === 0)}
+                                            disabled={isLoadingVariations || isAddingToCart || isBuyingNow || selectedProduct?.stock_status === "outofstock" || (isColorReq && activeColor.length === 0) || (isSizeReq && activeSize.length === 0)}
                                             className={`button-main w-full text-center ${isLoadingVariations || selectedProduct?.stock_status === "outofstock" || selectedProduct?.stock_quantity === 0 || !selectedProduct?.purchasable || (isColorReq && activeColor.length === 0) || (isSizeReq && activeSize.length === 0)
                                                 ? "bg-surface text-secondary2 border"
                                                 : "bg-black text-white"
                                                 }`}
                                         >
-                                            {isLoadingVariations ? "Loading..." : (selectedProduct?.stock_status === "outofstock" || selectedProduct?.stock_quantity === 0 ? "Out Of Stock" : "Buy It Now")}
+                                            {isBuyingNow ? (
+                                                <span className='flex items-center justify-center gap-2'>
+                                                    <Icon.CircleNotch className='animate-spin' size={16} />
+                                                    Processing...
+                                                </span>
+                                            ) : isLoadingVariations ? "Loading..." : (selectedProduct?.stock_status === "outofstock" || selectedProduct?.stock_quantity === 0 ? "Out Of Stock" : "Buy It Now")}
                                         </button>
                                     </div>
                                     <div className="flex items-center flex-wrap lg:gap-20 gap-8 gap-y-4 mt-5">
