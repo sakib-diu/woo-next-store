@@ -37,7 +37,10 @@ const Collection: React.FC<Props> = ({ props }) => {
             .filter((cat) => cat.parent !== 0 && cat.count > 0 && cat.image?.src)
             .forEach((cat) => {
                 const name = decodeEntities(cat.name);
-                const key = slugifyKey(name);
+                // Matches app/shop/page.tsx and lib/categoryUtils.ts, which both key the
+                // `category` query param off slugifyKey(cat.name) over the raw, HTML-entity-
+                // encoded name (not the decoded display name) — see generateMenuItems' docs.
+                const key = slugifyKey(cat.name);
                 const existing = byKey.get(key);
 
                 if (!existing) {
@@ -57,7 +60,7 @@ const Collection: React.FC<Props> = ({ props }) => {
     return (
         <>
             <div className={`collection-block ${props}`}>
-                <div className="list-collection section-swiper-navigation sm:px-5 px-4">
+                <div className="list-collection container section-swiper-navigation sm:px-5 px-4">
                     <Swiper
                         spaceBetween={12}
                         slidesPerView={2}
@@ -84,7 +87,7 @@ const Collection: React.FC<Props> = ({ props }) => {
                             <SwiperSlide key={item.key}>
                                 <Link href={`${PATH.SHOP}?category=${item.key}`} className="collection-item block relative h-full rounded-2xl overflow-hidden cursor-pointer">
                                     <div className="collection-item block relative h-full rounded-2xl overflow-hidden cursor-pointer" >
-                                        <div className="bg-img h-full">
+                                        <div className="bg-img h-full aspect-[3/4]">
                                             <Image
                                                 src={item.image}
                                                 width={1000}

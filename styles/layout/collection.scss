@@ -25,6 +25,28 @@
     overflow: unset;
 }
 
+// Swiper doesn't apply a slide's real width until its JS mounts and reads the
+// `breakpoints` config passed to <Swiper>; until then every `.swiper-slide` falls
+// back to Swiper's base CSS 100% width, and since the slide's aspect-ratio image
+// sizes its height off that width, an un-initialized full-width slide briefly
+// flashes as a near full-screen image. Mirror Collection.tsx's own breakpoints
+// (2/3/4 slides per view) here so the pre-JS layout already matches the post-JS one.
+.collection-block .list-collection .swiper:not(.swiper-initialized) .swiper-slide {
+    width: 50%;
+}
+
+@media (min-width: 768px) {
+    .collection-block .list-collection .swiper:not(.swiper-initialized) .swiper-slide {
+        width: 33.3333%;
+    }
+}
+
+@media (min-width: 1200px) {
+    .collection-block .list-collection .swiper:not(.swiper-initialized) .swiper-slide {
+        width: 25%;
+    }
+}
+
 .trending-block {
     .trending-item {
         .bg-img img {

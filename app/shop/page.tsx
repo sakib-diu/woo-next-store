@@ -60,19 +60,29 @@ export default async function BreadCrumb1({ searchParams }: BreadCrumb1Props) {
     // (e.g. "Shoes"), which in this catalog exists as a *separate* subcategory per audience
     // (shoes, shoes-men, shoes-women, ...) — so it's matched by grouping subcategories with
     // the same display name (see slugifyKey) and resolving to every category ID in that group.
-    // WooCommerce's `category` param treats a comma-separated list as OR, not AND, so combining
-    // an audience with a product-type group is a broader match than the two applied strictly
-    // together — acceptable since there's no way to express AND in a single REST call.
+    // WooCommerce's `category` param treats a comma-separated list as OR, not AND, so when both
+    // filters are active the product-type match is narrowed to only the subcategory whose
+    // parent is the selected audience (its per-audience variant) instead of every audience's —
+    // otherwise OR-ing the audience ID with every audience's "Tops" subcategory would match, say,
+    // Women's socks (via the audience ID) or Men's tops (via the type group), neither of which
+    // is actually "Women's tops".
     const audienceId = findIdBySlug(categories as CategorieType[], audience);
     const typeCategoryIds = category
         ? (categories as CategorieType[])
-            .filter(cat => cat.parent !== 0 && slugifyKey(cat.name) === category.toLowerCase())
+            .filter(cat =>
+                cat.parent !== 0 &&
+                slugifyKey(cat.name) === category.toLowerCase() &&
+                (audienceId === undefined || cat.parent === audienceId)
+            )
             .map(cat => cat.id)
         : [];
-    const categoryIds = [
-        ...(audienceId !== undefined ? [audienceId] : []),
-        ...typeCategoryIds,
-    ];
+    const categoryIds = category
+        // A category (product type) was requested: use its resolved subcategory ID(s) alone —
+        // already audience-scoped above when an audience is selected. If an audience was
+        // selected but has no matching product-type subcategory, fall back to a nonexistent ID
+        // so the query correctly yields zero products instead of silently dropping the filter.
+        ? (typeCategoryIds.length ? typeCategoryIds : audienceId !== undefined ? [-1] : [])
+        : audienceId !== undefined ? [audienceId] : [];
 
     const tagId = findIdBySlug(tags as TagType[], type);
 
