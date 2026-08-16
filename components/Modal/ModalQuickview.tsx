@@ -45,6 +45,11 @@ const ModalQuickview = () => {
     const isColorReq = selectedProduct?.attributes?.some(attr => attr.name.toLowerCase() === "color") || false
     const isSizeReq = selectedProduct?.attributes?.some(attr => attr.name.toLowerCase() === "size") || false
 
+    const variationImage = selectedVariation?.image
+    const displayImages = variationImage?.src
+        ? [variationImage, ...(selectedProduct?.images.filter(img => img.src !== variationImage.src) ?? [])]
+        : selectedProduct?.images ?? []
+
 
     // Reset the active attributes and quantity when the selected product changes
     useEffect(() => {
@@ -244,7 +249,7 @@ const ModalQuickview = () => {
                     <div className="flex h-full max-md:flex-col-reverse gap-y-6">
                         <div className="left lg:w-[388px] md:w-[300px] flex-shrink-0 px-6">
                             <div className="list-img max-md:flex items-center gap-4">
-                                {selectedProduct?.images.map((item, index) => (
+                                {displayImages.map((item, index) => (
                                     <div className="bg-img w-full aspect-[3/4] max-md:w-[150px] max-md:flex-shrink-0 rounded-[20px] overflow-hidden md:mt-6" key={index}>
                                         <Image
                                             src={item.src}

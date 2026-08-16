@@ -234,19 +234,15 @@ const Product: React.FC<ProductProps> = ({ data, type, style }) => {
                         )}
                         <Link href={`/product/${data.id}`} prefetch>
                             <div className="product-img w-full h-full aspect-[3/4]">
-                                {activeColor ? (
-                                    <>
-                                        {selectedVariation?.image?.src && (
-                                            <Image
-                                                src={selectedVariation.image.src}
-                                                width={500}
-                                                height={500}
-                                                alt={data.name}
-                                                priority={true}
-                                                className="w-full h-full object-cover duration-700"
-                                            />
-                                        )}
-                                    </>
+                                {selectedVariation?.image?.src ? (
+                                    <Image
+                                        src={selectedVariation.image.src}
+                                        width={500}
+                                        height={500}
+                                        alt={data.name}
+                                        priority={true}
+                                        className="w-full h-full object-cover duration-700"
+                                    />
                                 ) : (
                                     <>
                                         {data.images.map((img, index) => (

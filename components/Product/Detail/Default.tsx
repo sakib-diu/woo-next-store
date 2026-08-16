@@ -74,6 +74,11 @@ const Default: React.FC<Props> = ({ data, productId, variations, relatedProducts
     const isSizeReq = data.attributes?.some(attr => attr.name.toLowerCase() === "size")
     const router = useRouter();
 
+    const variationImage = selectedVariation?.image
+    const displayImages = variationImage?.src
+        ? [variationImage, ...data.images.filter(img => img.src !== variationImage.src)]
+        : data.images
+
     // console.log('Raw HTML:', data.description);
     useEffect(() => {
         let isMounted = true;
@@ -290,7 +295,7 @@ const Default: React.FC<Props> = ({ data, productId, variations, relatedProducts
                                 modules={[Thumbs]}
                                 className="mySwiper2 rounded-2xl overflow-hidden"
                             >
-                                {data.images.map((item, index) => (
+                                {displayImages.map((item, index) => (
                                     <SwiperSlide
                                         key={index}
                                         onClick={() => {
@@ -319,7 +324,7 @@ const Default: React.FC<Props> = ({ data, productId, variations, relatedProducts
                                 modules={[Navigation, Thumbs]}
                                 className="mySwiper"
                             >
-                                {data.images.map((item, index) => (
+                                {displayImages.map((item, index) => (
                                     <SwiperSlide
                                         key={index}
                                     >
@@ -353,7 +358,7 @@ const Default: React.FC<Props> = ({ data, productId, variations, relatedProducts
                                         swiperRef.current = swiper
                                     }}
                                 >
-                                    {data.images.map((item, index) => (
+                                    {displayImages.map((item, index) => (
                                         <SwiperSlide
                                             key={index}
                                             onClick={() => {
