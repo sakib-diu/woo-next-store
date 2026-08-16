@@ -97,23 +97,21 @@
     width: 60px;
     height: 60px;
     border-radius: 50%;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
     transition: all ease 0.4s;
 }
 
-.section-swiper-navigation .swiper-button-prev::after {
-    font-size: 24px;
-    padding-right: 4px;
-}
-
-.section-swiper-navigation .swiper-button-next::after {
-    font-size: 24px;
-    padding-left: 4px;
+.section-swiper-navigation .swiper-button-prev .swiper-navigation-icon,
+.section-swiper-navigation .swiper-button-next .swiper-navigation-icon {
+    width: 16px;
+    height: 16px;
 }
 
 .section-swiper-navigation .swiper-button-prev:hover,
 .section-swiper-navigation .swiper-button-next:hover {
     background-color: var(--black);
     color: var(--white);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
 }
 
 .style-border.section-swiper-navigation .swiper-button-prev,
@@ -202,9 +200,10 @@
         }
     }
 
-    .section-swiper-navigation .swiper-button-prev::after,
-    .section-swiper-navigation .swiper-button-next::after {
-        font-size: 14px !important;
+    .section-swiper-navigation .swiper-button-prev .swiper-navigation-icon,
+    .section-swiper-navigation .swiper-button-next .swiper-navigation-icon {
+        width: 12px !important;
+        height: 12px !important;
     }
 }
 
