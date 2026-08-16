@@ -269,10 +269,10 @@ const ModalQuickview = () => {
                                 </div>
                             </div>
                             <div className="product-infor px-4">
-                                <div className="flex justify-between">
-                                    <div>
+                                <div className="flex justify-between gap-4">
+                                    <div className="flex-1 min-w-0">
                                         <div className="caption2 text-secondary font-semibold uppercase">{selectedProduct?.tags?.[0]?.name || selectedProduct?.type}</div>
-                                        <div className="heading4 mt-1">{selectedProduct?.name}</div>
+                                        <div className="heading4 mt-1 break-words">{selectedProduct?.name}</div>
                                     </div>
                                     <div
                                         className={`add-wishlist-btn w-10 h-10 flex items-center justify-center border border-line cursor-pointer rounded-lg duration-300 flex-shrink-0 hover:bg-black hover:text-white ${wishlistState.wishlistArray.some(item => item.id === selectedProduct?.id) ? 'active' : ''}`}
@@ -289,34 +289,36 @@ const ModalQuickview = () => {
                                     <Rate currentRate={Number(selectedProduct?.average_rating) || 0} size={14} />
                                     <span className='caption1 text-secondary'>(1.234 reviews)</span>
                                 </div>
-                                <div className="flex items-center gap-3 flex-wrap mt-5 pb-6 border-b border-line">
-                                    {isLoadingVariations && selectedProduct?.variations && selectedProduct.variations.length > 0 ? (
-                                        <div className="animate-pulse">
-                                            <div className="h-6 bg-surface rounded w-20"></div>
-                                        </div>
-                                    ) : (
-                                        <>
-                                            <div className="product-price heading5">
-                                                {currentCurrency ? decodeHtmlEntities(currentCurrency.symbol) : '$'}
-                                                {Number(selectedVariation?.sale_price || selectedVariation?.price || selectedProduct?.sale_price || selectedProduct?.price).toFixed(2)}
+                                <div className="mt-5 pb-6 border-b border-line">
+                                    <div className="flex items-center gap-3 flex-wrap">
+                                        {isLoadingVariations && selectedProduct?.variations && selectedProduct.variations.length > 0 ? (
+                                            <div className="animate-pulse">
+                                                <div className="h-6 bg-surface rounded w-20"></div>
                                             </div>
-                                            {((selectedVariation?.on_sale || selectedProduct?.on_sale) && percentSale > 0) && (
-                                                <>
-                                                    <div className='w-px h-4 bg-line'></div>
-                                                    <div className="product-origin-price font-normal text-secondary2">
-                                                        <del>
-                                                            {currentCurrency ? decodeHtmlEntities(currentCurrency.symbol) : '$'}
-                                                            {Number(selectedVariation?.regular_price || selectedProduct?.regular_price || selectedProduct?.price).toFixed(2)}
-                                                        </del>
-                                                    </div>
-                                                    <div className="product-sale caption2 font-semibold bg-green px-3 py-0.5 inline-block rounded-full">
-                                                        -{percentSale}%
-                                                    </div>
-                                                </>
-                                            )}
-                                        </>
-                                    )}
-                                    <div className='desc text-secondary parsed-html mt-3'>{selectedProduct?.short_description ? parse(selectedProduct.short_description) : parse(selectedProduct?.description.toString().slice(0, 200) + "...")}</div>
+                                        ) : (
+                                            <>
+                                                <div className="product-price heading5">
+                                                    {currentCurrency ? decodeHtmlEntities(currentCurrency.symbol) : '$'}
+                                                    {Number(selectedVariation?.sale_price || selectedVariation?.price || selectedProduct?.sale_price || selectedProduct?.price).toFixed(2)}
+                                                </div>
+                                                {((selectedVariation?.on_sale || selectedProduct?.on_sale) && percentSale > 0) && (
+                                                    <>
+                                                        <div className='w-px h-4 bg-line'></div>
+                                                        <div className="product-origin-price font-normal text-secondary2">
+                                                            <del>
+                                                                {currentCurrency ? decodeHtmlEntities(currentCurrency.symbol) : '$'}
+                                                                {Number(selectedVariation?.regular_price || selectedProduct?.regular_price || selectedProduct?.price).toFixed(2)}
+                                                            </del>
+                                                        </div>
+                                                        <div className="product-sale caption2 font-semibold bg-green px-3 py-0.5 inline-block rounded-full">
+                                                            -{percentSale}%
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
+                                    <div className='desc text-secondary parsed-html max-w-prose mt-3'>{selectedProduct?.short_description ? parse(selectedProduct.short_description) : parse(selectedProduct?.description.toString().slice(0, 200) + "...")}</div>
                                 </div>
                                 <div className="list-action mt-6">
                                     {isLoadingVariations && selectedProduct?.variations && selectedProduct.variations.length > 0 ? (
@@ -433,29 +435,29 @@ const ModalQuickview = () => {
                                             </div>
                                         </div>
                                         <div className="flex items-center flex-wrap gap-1 mt-3">
-                                            <Icon.Timer className='body1' />
-                                            <span className="text-title">Estimated Delivery:</span>
+                                            <Icon.Timer className='body1 flex-shrink-0' />
+                                            <span className="text-title flex-shrink-0">Estimated Delivery:</span>
                                             <span className="text-secondary">{new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toLocaleDateString()}</span>
                                         </div>
-                                        <div className="flex items-center gap-1 mt-3">
-                                            <div className="text-title">SKU:</div>
-                                            <div className="text-secondary">{selectedProduct?.sku || "N/A"}</div>
+                                        <div className="flex items-center flex-wrap gap-1 mt-3">
+                                            <div className="text-title flex-shrink-0">SKU:</div>
+                                            <div className="text-secondary break-words">{selectedProduct?.sku || "N/A"}</div>
                                         </div>
-                                        <div className="flex items-center gap-1 mt-3">
-                                            <div className="text-title">Categories:</div>
-                                            <div className="text-secondary">
+                                        <div className="flex items-start flex-wrap gap-1 mt-3">
+                                            <div className="text-title flex-shrink-0">Categories:</div>
+                                            <div className="text-secondary break-words min-w-0">
                                                 {selectedProduct?.categories?.map((item, index) => item.name.charAt(0).toUpperCase() + item.name.slice(1).toLowerCase()).join(", ") || "N/A"}
                                             </div>
                                         </div>
-                                        <div className="flex items-center gap-1 mt-3">
-                                            <div className="text-title">Tag:</div>
-                                            <div className="text-secondary">
+                                        <div className="flex items-start flex-wrap gap-1 mt-3">
+                                            <div className="text-title flex-shrink-0">Tag:</div>
+                                            <div className="text-secondary break-words min-w-0">
                                                 {selectedProduct?.tags?.map((item) => item.name.charAt(0).toUpperCase() + item.name.slice(1).toLowerCase()).join(", ") || "N/A"}
                                             </div>
                                         </div>
                                     </div>
                                     <div className="list-payment mt-7">
-                                        <div className="main-content lg:pt-8 pt-6 lg:pb-6 pb-4 sm:px-4 px-3 border border-line rounded-xl relative max-md:w-2/3 max-sm:w-full">
+                                        <div className="main-content lg:pt-8 pt-6 lg:pb-6 pb-4 sm:px-4 px-3 border border-line rounded-xl relative w-full">
                                             <div className="heading6 px-5 bg-white absolute -top-[14px] left-1/2 -translate-x-1/2 whitespace-nowrap">Guaranteed safe checkout</div>
                                             <div className="list grid grid-cols-4">
                                                 <div className="item flex items-center justify-center lg:px-3 px-1">

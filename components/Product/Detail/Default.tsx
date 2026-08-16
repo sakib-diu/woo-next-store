@@ -376,13 +376,13 @@ const Default: React.FC<Props> = ({ data, productId, variations, relatedProducts
                             </div>
                         </div>
                         <div className="product-infor md:w-1/2 w-full lg:pl-[15px] md:pl-2">
-                            <div className="flex justify-between">
-                                <div>
+                            <div className="flex justify-between gap-4">
+                                <div className="flex-1 min-w-0">
                                     <div className="caption2 text-secondary font-semibold uppercase">{data.tags[0]?.name || ""}</div>
-                                    <div className="heading4 max-w-[85%] mt-1">{data.name}</div>
+                                    <div className="heading4 mt-1 break-words">{data.name}</div>
                                 </div>
                                 <div
-                                    className={`add-wishlist-btn w-12 h-12 flex items-center justify-center border border-line cursor-pointer rounded-xl duration-300 hover:bg-black hover:text-white ${wishlistState.wishlistArray.some(item => item.id.toString() === data.id.toString()) ? 'active' : ''}`}
+                                    className={`add-wishlist-btn w-12 h-12 flex items-center justify-center border border-line cursor-pointer rounded-xl duration-300 flex-shrink-0 hover:bg-black hover:text-white ${wishlistState.wishlistArray.some(item => item.id.toString() === data.id.toString()) ? 'active' : ''}`}
                                     onClick={handleAddToWishlist}
                                 >
                                     {wishlistState.wishlistArray.some(item => item.id.toString() === data.id.toString()) ? (
@@ -400,27 +400,29 @@ const Default: React.FC<Props> = ({ data, productId, variations, relatedProducts
                                 <Rate currentRate={Number(reviewsInfo.calculatedAverage_rating)} size={16} />
                                 <span className='caption1 text-secondary'>({reviews.length} review{reviews.length > 1 ? "s" : ""})</span>
                             </div>
-                            <div className="flex items-center gap-3 flex-wrap mt-5 pb-6 border-b border-line">
-                                <div className="product-price heading5">
-                                    {decodeHtmlEntities(currentCurrency!.symbol)}
-                                    {Number(selectedVariation?.sale_price || selectedVariation?.price || data.sale_price || data.price).toFixed(2)}
+                            <div className="mt-5 pb-6 border-b border-line">
+                                <div className="flex items-center gap-3 flex-wrap">
+                                    <div className="product-price heading5">
+                                        {currentCurrency ? decodeHtmlEntities(currentCurrency.symbol) : '$'}
+                                        {Number(selectedVariation?.sale_price || selectedVariation?.price || data.sale_price || data.price).toFixed(2)}
+                                    </div>
+                                    {((selectedVariation?.on_sale || data.on_sale) && percentSale > 0) && (
+                                        <>
+                                            <div className='w-px h-4 bg-line'></div>
+                                            <div className="product-origin-price font-normal text-secondary2">
+                                                <del>
+                                                    {currentCurrency ? decodeHtmlEntities(currentCurrency.symbol) : '$'}
+                                                    {Number(selectedVariation?.regular_price || data.regular_price || data.price).toFixed(2)}
+                                                </del>
+                                            </div>
+                                            <div className="product-sale caption2 font-semibold bg-green px-3 py-0.5 inline-block rounded-full">
+                                                -{percentSale}%
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
-                                {((selectedVariation?.on_sale || data.on_sale) && percentSale > 0) && (
-                                    <>
-                                        <div className='w-px h-4 bg-line'></div>
-                                        <div className="product-origin-price font-normal text-secondary2">
-                                            <del>
-                                                {decodeHtmlEntities(currentCurrency!.symbol)}
-                                                {Number(selectedVariation?.regular_price || data.regular_price || data.price).toFixed(2)}
-                                            </del>
-                                        </div>
-                                        <div className="product-sale caption2 font-semibold bg-green px-3 py-0.5 inline-block rounded-full">
-                                            -{percentSale}%
-                                        </div>
-                                    </>
-                                )}
 
-                                <div className='desc text-secondary parsed-html mt-3'>{parse(data.short_description || "")}</div>
+                                <div className='desc text-secondary parsed-html max-w-prose mt-3'>{parse(data.short_description || "")}</div>
                             </div>
                             <div className="list-action mt-6">
                                 {data.attributes?.some(item => item.name.toLowerCase() === "color") && (
@@ -535,9 +537,9 @@ const Default: React.FC<Props> = ({ data, productId, variations, relatedProducts
                                             <div className="text-title">Ask A Question</div>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-1 mt-3">
-                                        <Icon.TimerIcon className='body1' />
-                                        <div className="text-title">Estimated Delivery:</div>
+                                    <div className="flex items-center flex-wrap gap-1 mt-3">
+                                        <Icon.TimerIcon className='body1 flex-shrink-0' />
+                                        <div className="text-title flex-shrink-0">Estimated Delivery:</div>
                                         <div>{new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toLocaleDateString()}</div>
                                     </div>
                                     {/* <div className="flex items-center gap-1 mt-3">
@@ -545,25 +547,25 @@ const Default: React.FC<Props> = ({ data, productId, variations, relatedProducts
                                         <div className="text-title">38</div>
                                         <div className="text-secondary">people viewing this product right now!</div>
                                     </div> */}
-                                    <div className="flex items-center gap-1 mt-3">
-                                        <div className="text-title">SKU:</div>
-                                        <div className="text-secondary">{data.sku || "N/A"}</div>
+                                    <div className="flex items-center flex-wrap gap-1 mt-3">
+                                        <div className="text-title flex-shrink-0">SKU:</div>
+                                        <div className="text-secondary break-words">{data.sku || "N/A"}</div>
                                     </div>
-                                    <div className="flex items-center gap-1 mt-3">
-                                        <div className="text-title">Categories:</div>
-                                        <div className="text-secondary">
+                                    <div className="flex items-start flex-wrap gap-1 mt-3">
+                                        <div className="text-title flex-shrink-0">Categories:</div>
+                                        <div className="text-secondary break-words min-w-0">
                                             {data.categories?.map((item, index) => item.name.charAt(0).toUpperCase() + item.name.slice(1).toLowerCase()).join(", ") || "N/A"}
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-1 mt-3">
-                                        <div className="text-title">Tag:</div>
-                                        <div className="text-secondary">
+                                    <div className="flex items-start flex-wrap gap-1 mt-3">
+                                        <div className="text-title flex-shrink-0">Tag:</div>
+                                        <div className="text-secondary break-words min-w-0">
                                             {data.tags?.map((item) => item.name.charAt(0).toUpperCase() + item.name.slice(1).toLowerCase()).join(", ") || "N/A"}
                                         </div>
                                     </div>
                                 </div>
                                 <div className="list-payment mt-7">
-                                    <div className="main-content lg:pt-8 pt-6 lg:pb-6 pb-4 sm:px-4 px-3 border border-line rounded-xl relative max-md:w-2/3 max-sm:w-full">
+                                    <div className="main-content lg:pt-8 pt-6 lg:pb-6 pb-4 sm:px-4 px-3 border border-line rounded-xl relative w-full">
                                         <div className="heading6 px-5 bg-white absolute -top-[14px] left-1/2 -translate-x-1/2 whitespace-nowrap">Guranteed safe checkout</div>
                                         <div className="list grid grid-cols-4 ">
                                             <div className="item flex items-center justify-center lg:px-3 px-1 ">
@@ -690,7 +692,7 @@ const Default: React.FC<Props> = ({ data, productId, variations, relatedProducts
                                     <div className='grid md:grid-cols-2 gap-8 gap-y-5'>
                                         <div className="col-span-2 pr-8">
                                             <div className="heading6">Description</div>
-                                            <div className="mt-2 parsed-html">{parse(data.description)}</div>
+                                            <div className="mt-2 parsed-html max-w-prose">{parse(data.description)}</div>
                                         </div>
                                         {/* <div className="right">
                                         <div className="heading6">About This Products</div>
@@ -957,7 +959,7 @@ const Default: React.FC<Props> = ({ data, productId, variations, relatedProducts
                                                             <Icon.DotsThreeIcon size={24} weight='bold' />
                                                         </div> */}
                                                     </div>
-                                                    <div className="mt-3 text-lg font-medium">{parse(review.review)}</div>
+                                                    <div className="mt-3 text-lg font-medium max-w-prose break-words">{parse(review.review)}</div>
                                                     {/* <div className="action mt-3">
                                                 <div className="flex items-center gap-4">
                                                     <div className="like-btn flex items-center gap-1 cursor-pointer">
