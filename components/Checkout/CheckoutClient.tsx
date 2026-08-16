@@ -4,6 +4,7 @@ import { validateCoupon } from '@/actions/coupon';
 import { useAppData } from '@/context/AppDataContext';
 import { useCart } from '@/context/CartContext';
 import { useModalCartContext } from '@/context/ModalCartContext';
+import { useDebounce } from '@/hooks/useDebounce';
 import { calculatePrice, cn, decodeHtmlEntities } from '@/lib/utils';
 import { CountryDataType, ShippingMethodDataType, ShippingZoneDataType, StateDataType, TaxDataType } from '@/types/data-type';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -121,23 +122,6 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
         setSelectedState(watchedState || '');
     }, [watchedCountry, watchedState]);
 
-
-    // Debounce hook for shipping calculation
-    const useDebounce = <T,>(value: T, delay: number): T => {
-        const [debouncedValue, setDebouncedValue] = useState<T>(value);
-
-        useEffect(() => {
-            const handler = setTimeout(() => {
-                setDebouncedValue(value);
-            }, delay);
-
-            return () => {
-                clearTimeout(handler);
-            };
-        }, [value, delay]);
-
-        return debouncedValue;
-    };
 
     const debouncedCountry = useDebounce(selectedCountry, 500);
     const debouncedState = useDebounce(selectedState, 500);
