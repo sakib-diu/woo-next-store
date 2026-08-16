@@ -126,7 +126,7 @@ const OrderHistory = ({ orders, customerId }: OrderHistoryProps) => {
                                                                 <p className="text-sm text-gray-500">Qty: {item.quantity}</p>
                                                             </div>
                                                             <p className="text-sm font-medium text-gray-900 ml-4">
-                                                                {formatPrice(item.total)}
+                                                                {formatPrice(item.total ?? '0')}
                                                             </p>
                                                         </div>
                                                     ))}

@@ -45,18 +45,22 @@ export interface TaxLine {
 export interface LineItem {
     id?: number; // Item ID (read-only)
     name: string; // Product name
-    product_id: number; // Product ID
+    // Product ID for simple products; omit when variation_id is set — WooCommerce resolves
+    // the parent product from the variation automatically.
+    product_id?: number;
     variation_id?: number; // Variation ID, if applicable
     quantity: number; // Quantity ordered
     tax_class?: string; // Slug of the tax class of product
+    // subtotal/total are intentionally left unset when creating orders from cart data —
+    // omitting them lets WooCommerce compute authoritative prices from the catalog itself.
     subtotal?: string; // Line subtotal (before discounts)
     subtotal_tax?: string; // Line subtotal tax (before discounts) (read-only)
-    total: string; // Line total (after discounts)
+    total?: string; // Line total (after discounts)
     total_tax?: string; // Line total tax (after discounts) (read-only)
     taxes?: TaxLine[]; // Line taxes (read-only)
     meta_data?: MetaData[]; // Meta data
     sku?: string; // Product SKU (read-only)
-    price: string; // Product price (read-only)
+    price?: string; // Product price (read-only)
     size?: string; // Product size (custom field)
 }
 

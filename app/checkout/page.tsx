@@ -6,23 +6,7 @@ import { getCountries, getTaxes, getShippingZones } from '@/actions/data-actions
 import CheckoutClient from '@/components/Checkout/CheckoutClient'
 import Footer from '../../components/Footer/Footer'
 
-interface CouponData {
-    id: string
-    code: string
-    discount: number
-    minValue: number
-    description: string
-    isValid: boolean
-}
-
-
-interface CheckoutPageProps {
-    searchParams: { appliedCoupon?: string }
-}
-
-const Checkout = async ({ searchParams }: CheckoutPageProps) => {
-    const { appliedCoupon } = await searchParams;
-
+const Checkout = async () => {
     const cookieStore = await cookies()
     const userCookie = cookieStore.get('user')
     const tokenCookie = cookieStore.get('jwt_token')
@@ -60,7 +44,6 @@ const Checkout = async ({ searchParams }: CheckoutPageProps) => {
                 taxesData={taxesData}
                 shippingData={shippingData}
                 shippingZones={shippingZones}
-                appliedCouponProp={appliedCoupon || ''}
                 shippingAddress={customer?.shipping}
             />
             <Footer />

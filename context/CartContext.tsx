@@ -1,173 +1,176 @@
 'use client'
 
-import { Product as ProductType, VariationProduct } from '@/types/product-type';
-import React, { createContext, useContext, useEffect, useReducer, useState } from 'react';
+import {
+    addCartItem,
+    applyCartCoupon,
+    clearCart as clearCartAction,
+    fetchCart,
+    removeCartCoupon,
+    removeCartItem,
+    updateCartItemQuantity,
+} from '@/actions/cart-actions';
+import type { StoreApiResult } from '@/lib/store-api-client';
+import { StoreApiCart } from '@/types/store-api-type';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
-// --- Interfaces ---
-export interface CartItem extends ProductType {
-    quantity: number;
-    selectedSize: string;
-    selectedColor: string;
-    variation_id?: string;
-    selectedVariation?: VariationProduct;
-}
+export type { StoreApiCartItem as CartItem } from '@/types/store-api-type';
 
-interface CartState {
-    cartArray: CartItem[];
-}
-
-// --- Action Types ---
-type CartAction =
-    | {
-        type: 'ADD_OR_UPDATE_CART';
-        payload: {
-            product: ProductType;
-            quantity: number;
-            selectedSize: string;
-            selectedColor: string;
-            variation_id?: string;
-            selectedVariation?: VariationProduct;
-        }
-    }
-    | { type: 'UPDATE_QUANTITY'; payload: { itemId: string; quantity: number } }
-    | { type: 'REMOVE_FROM_CART'; payload: { itemId: string, variation_id?: string } }
-    | { type: 'LOAD_CART'; payload: CartItem[] }
-    | { type: 'CLEAR_CART' };
-
-// --- Context Props ---
-interface CartContextProps {
-    cartState: CartState;
-    addToCart: (
-        product: ProductType,
-        quantity: number,
-        selectedSize: string,
-        selectedColor: string,
-        variation_id?: string,
-        selectedVariation?: VariationProduct
-    ) => void;
-    removeFromCart: (itemId: string, variation_id?: string) => void;
-    updateCart: (itemId: string, quantity: number) => void;
-    clearCart: () => void;
-}
-
-// --- Constants ---
-const REFRESH_INTERVAL_MS = 60 * 60 * 1000;
-const LOCAL_STORAGE_KEYS = {
-    cart: 'cartItems',
-    lastRefreshed: 'cartLastRefreshed',
+const EMPTY_CART: StoreApiCart = {
+    items: [],
+    coupons: [],
+    totals: {
+        total_items: '0',
+        total_items_tax: '0',
+        total_fees: '0',
+        total_fees_tax: '0',
+        total_discount: '0',
+        total_discount_tax: '0',
+        total_shipping: null,
+        total_shipping_tax: null,
+        total_price: '0',
+        total_tax: '0',
+        tax_lines: [],
+        currency_code: 'USD',
+        currency_symbol: '$',
+        currency_minor_unit: 2,
+        currency_decimal_separator: '.',
+        currency_thousand_separator: ',',
+        currency_prefix: '$',
+        currency_suffix: '',
+    },
+    needs_payment: false,
+    needs_shipping: false,
+    has_calculated_shipping: false,
+    shipping_rates: [],
+    items_count: 0,
+    items_weight: 0,
+    errors: [],
 };
+
+type MutationResult = { success: boolean; error?: string };
+
+interface CartContextProps {
+    cart: StoreApiCart;
+    /** True only while the cart is hydrating from the server on first load. */
+    isLoading: boolean;
+    /** True while any add/update/remove/coupon call is in flight. */
+    isMutating: boolean;
+    /** The item key currently being updated/removed, if any — for per-row loading UI. */
+    mutatingKey: string | null;
+    /** The most recent mutation's error, if any (e.g. "out of stock"). */
+    error: string | null;
+    addToCart: (id: number, quantity: number) => Promise<MutationResult>;
+    updateCartItem: (key: string, quantity: number) => Promise<MutationResult>;
+    removeFromCart: (key: string) => Promise<MutationResult>;
+    applyCoupon: (code: string) => Promise<MutationResult>;
+    removeCoupon: (code: string) => Promise<MutationResult>;
+    clearCart: () => Promise<void>;
+    refreshCart: () => Promise<void>;
+}
 
 const CartContext = createContext<CartContextProps | undefined>(undefined);
 
-// --- Reducer ---
-const cartReducer = (state: CartState, action: CartAction): CartState => {
-    switch (action.type) {
-        case 'ADD_OR_UPDATE_CART': {
-            const { product, quantity, selectedSize, selectedColor, variation_id, selectedVariation } = action.payload;
-            const findIndex = state.cartArray.findIndex(item => item.id === product.id && (item.variation_id ?? null) === (variation_id ?? null));
-
-            if (findIndex > -1) {
-                const newCartArray = [...state.cartArray];
-                newCartArray[findIndex].quantity += quantity;
-                return { ...state, cartArray: newCartArray };
-            } else {
-                const newItem: CartItem = { ...product, quantity, selectedSize, selectedColor, variation_id, selectedVariation };
-                return { ...state, cartArray: [...state.cartArray, newItem] };
-            }
-        }
-        case 'UPDATE_QUANTITY': {
-            const { itemId, quantity } = action.payload;
-            if (quantity <= 0) {
-                return { ...state, cartArray: state.cartArray.filter(item => item.id.toString() !== itemId) };
-            }
-            return {
-                ...state,
-                cartArray: state.cartArray.map(item =>
-                    item.id.toString() === itemId ? { ...item, quantity } : item
-                ),
-            };
-        }
-        case 'REMOVE_FROM_CART':
-            return {
-                ...state, cartArray: state.cartArray.filter((item) => {
-                    if (item.id.toString() !== action.payload.itemId) return true;
-                    if (action.payload.variation_id && item.variation_id) {
-                        if (item.variation_id !== action.payload.variation_id) return true;
-                    }
-                    return false;
-                })
-            };
-
-        case 'LOAD_CART':
-            return { ...state, cartArray: action.payload };
-
-        case 'CLEAR_CART':
-            return { ...state, cartArray: [] };
-
-        default:
-            return state;
-    }
-};
-
-// --- Provider ---
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [cartState, dispatch] = useReducer(cartReducer, { cartArray: [] });
-    const [isHydrated, setIsHydrated] = useState(false);
+    const [cart, setCart] = useState<StoreApiCart>(EMPTY_CART);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isMutating, setIsMutating] = useState(false);
+    const [mutatingKey, setMutatingKey] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
 
-    // Load from localStorage
     useEffect(() => {
-        try {
-            const storedCart = localStorage.getItem(LOCAL_STORAGE_KEYS.cart);
-            if (storedCart) {
-                dispatch({ type: 'LOAD_CART', payload: JSON.parse(storedCart) });
+        let cancelled = false;
+        fetchCart().then((result) => {
+            if (cancelled) return;
+            if (result.ok) {
+                setCart(result.cart);
+            } else {
+                setError(result.error);
             }
-        } catch (error) {
-            console.error("Failed to load cart from localStorage", error);
-        }
-        setIsHydrated(true);
+            setIsLoading(false);
+        });
+        return () => {
+            cancelled = true;
+        };
     }, []);
 
-    // Save to localStorage
-    useEffect(() => {
-        if (!isHydrated) return;
-        try {
-            localStorage.setItem(LOCAL_STORAGE_KEYS.cart, JSON.stringify(cartState.cartArray));
-        } catch (error) {
-            console.error("Failed to save cart to localStorage", error);
-        }
-    }, [cartState.cartArray, isHydrated]);
+    const runMutation = useCallback(
+        async (action: () => Promise<StoreApiResult>, key: string | null = null): Promise<MutationResult> => {
+            setIsMutating(true);
+            setMutatingKey(key);
+            setError(null);
 
-    // Refresh data
-    useEffect(() => {
-        if (!isHydrated || cartState.cartArray.length === 0) return;
-        const refreshCartData = async () => { /* ... */ };
-        refreshCartData();
-    }, [isHydrated, cartState.cartArray]);
+            const result = await action();
 
-    const addToCart = (product: ProductType, quantity: number, selectedSize: string, selectedColor: string, variation_id?: string, selectedVariation?: VariationProduct) => {
-        dispatch({ type: 'ADD_OR_UPDATE_CART', payload: { product, quantity, selectedSize, selectedColor, variation_id, selectedVariation } });
-    };
+            if (result.ok) {
+                setCart(result.cart);
+            } else {
+                setError(result.error);
+            }
 
-    const removeFromCart = (itemId: string, variation_id?: string) => {
-        dispatch({ type: 'REMOVE_FROM_CART', payload: { itemId, variation_id } });
-    };
+            setIsMutating(false);
+            setMutatingKey(null);
 
-    const updateCart = (itemId: string, quantity: number) => {
-        dispatch({ type: 'UPDATE_QUANTITY', payload: { itemId, quantity } });
-    };
+            return result.ok ? { success: true } : { success: false, error: result.error };
+        },
+        []
+    );
 
-    const clearCart = () => {
-        dispatch({ type: 'CLEAR_CART' });
-    };
+    const addToCart = useCallback(
+        (id: number, quantity: number) => runMutation(() => addCartItem(id, quantity)),
+        [runMutation]
+    );
+
+    const updateCartItem = useCallback(
+        (key: string, quantity: number) => runMutation(() => updateCartItemQuantity(key, quantity), key),
+        [runMutation]
+    );
+
+    const removeFromCart = useCallback(
+        (key: string) => runMutation(() => removeCartItem(key), key),
+        [runMutation]
+    );
+
+    const applyCoupon = useCallback(
+        (code: string) => runMutation(() => applyCartCoupon(code)),
+        [runMutation]
+    );
+
+    const removeCoupon = useCallback(
+        (code: string) => runMutation(() => removeCartCoupon(code)),
+        [runMutation]
+    );
+
+    const clearCart = useCallback(async () => {
+        await runMutation(() => clearCartAction());
+    }, [runMutation]);
+
+    const refreshCart = useCallback(async () => {
+        const result = await fetchCart();
+        if (result.ok) setCart(result.cart);
+    }, []);
 
     return (
-        <CartContext.Provider value={{ cartState, addToCart, removeFromCart, updateCart, clearCart }}>
+        <CartContext.Provider
+            value={{
+                cart,
+                isLoading,
+                isMutating,
+                mutatingKey,
+                error,
+                addToCart,
+                updateCartItem,
+                removeFromCart,
+                applyCoupon,
+                removeCoupon,
+                clearCart,
+                refreshCart,
+            }}
+        >
             {children}
         </CartContext.Provider>
     );
 };
 
-// --- Custom Hook ---
 export const useCart = () => {
     const context = useContext(CartContext);
     if (!context) {

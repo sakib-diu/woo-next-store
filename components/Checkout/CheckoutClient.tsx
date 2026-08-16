@@ -1,11 +1,10 @@
 'use client'
 import { isValidPhoneNumber } from "libphonenumber-js";
-import { validateCoupon } from '@/actions/coupon';
 import { useAppData } from '@/context/AppDataContext';
 import { useCart } from '@/context/CartContext';
 import { useModalCartContext } from '@/context/ModalCartContext';
 import { useDebounce } from '@/hooks/useDebounce';
-import { calculatePrice, cn, decodeHtmlEntities } from '@/lib/utils';
+import { cn, decodeHtmlEntities, fromMinorUnit } from '@/lib/utils';
 import { CountryDataType, ShippingMethodDataType, ShippingZoneDataType, StateDataType, TaxDataType } from '@/types/data-type';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as Icon from "@phosphor-icons/react/dist/ssr";
@@ -51,7 +50,6 @@ interface CheckoutClientProps {
     taxesData: TaxDataType[];
     shippingData: ShippingMethodDataType[];
     shippingZones?: ShippingZoneDataType[];
-    appliedCouponProp?: string;
     shippingAddress?: Address | null;
 }
 
@@ -60,26 +58,20 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
     taxesData,
     shippingData,
     shippingZones = [],
-    appliedCouponProp,
     shippingAddress
 }) => {
     const { openModalCart } = useModalCartContext()
     const { currentCurrency } = useAppData()
-    const { cartState, clearCart } = useCart();
+    const { cart, clearCart, applyCoupon, removeCoupon, isMutating } = useCart();
     const [totalCart, setTotalCart] = useState<number>(0)
     const [selectedCountry, setSelectedCountry] = useState<string>('')
     const [selectedState, setSelectedState] = useState<string>('')
-    const [appliedCoupon, setAppliedCoupon] = useState<{
-        code: string
-        discount_type: string
-        amount: number
-        product_ids: number[]
-    } | null>(null)
     const [couponCode, setCouponCode] = useState<string>('')
     const [shippingCost, setShippingCost] = useState<number>(0)
     const [taxAmount, setTaxAmount] = useState<number>(0)
     const [selectedTaxs, setSelectedTaxs] = useState<TaxDataType[]>([])
     const [couponError, setCouponError] = useState<string>('')
+    const [isApplyingCoupon, setIsApplyingCoupon] = useState<boolean>(false)
     const [availableShippingMethods, setAvailableShippingMethods] = useState<ShippingMethodDataType[]>([])
     const [selectedShippingMethod, setSelectedShippingMethod] = useState<string>('')
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -236,29 +228,8 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
     }, [taxesData])
 
     const calculateCartTotal = useCallback(() => {
-        return cartState.cartArray.reduce((total, item) => {
-            return total + Number(calculatePrice(item)) * item.quantity
-        }, 0)
-    }, [cartState.cartArray])
-
-    // Effect for initial coupon validation
-    useEffect(() => {
-        if (appliedCouponProp && appliedCouponProp?.length > 0) {
-            // Fetch the coupon details from the server
-            validateCoupon(appliedCouponProp, cartState.cartArray)
-                .then(result => {
-                    if (result.isValid && result.coupon) {
-                        setAppliedCoupon(result.coupon)
-                    } else {
-                        setCouponError(result.error || 'Invalid coupon code')
-                    }
-                })
-                .catch(error => {
-                    console.error('Error validating coupon:', error)
-                    setCouponError('Error validating coupon')
-                })
-        }
-    }, [appliedCouponProp, cartState.cartArray])
+        return fromMinorUnit(cart.totals.total_items, cart.totals.currency_minor_unit)
+    }, [cart.totals])
 
     // Effect for cart total calculation
     useEffect(() => {
@@ -288,42 +259,28 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
         e.preventDefault()
         if (!couponCode) return
 
-        try {
-            setCouponError('')
-            const result = await validateCoupon(couponCode, cartState.cartArray)
+        setCouponError('')
+        setIsApplyingCoupon(true)
+        const result = await applyCoupon(couponCode)
+        setIsApplyingCoupon(false)
 
-            if (result.isValid && result.coupon) {
-                setAppliedCoupon(result.coupon)
-                setCouponCode('')
-            } else {
-                setCouponError(result.error || 'Invalid coupon code')
-            }
-        } catch (error) {
-            console.error('Error validating coupon:', error)
-            setCouponError('Error validating coupon')
+        if (result.success) {
+            setCouponCode('')
+        } else {
+            setCouponError(result.error || 'Invalid coupon code')
         }
     }
 
+    const handleCouponRemove = async () => {
+        if (cart.coupons.length === 0) return
+        setCouponError('')
+        await removeCoupon(cart.coupons[0].code)
+    }
+
+    // WooCommerce's Store API already computes the discount server-side per applied coupon.
     const calculateDiscountAmount = useCallback(() => {
-        if (!appliedCoupon) return 0
-
-        // Handle different discount types from WooCommerce
-        if (appliedCoupon.discount_type === 'percent') {
-            return Math.floor((totalCart / 100) * appliedCoupon.amount)
-        } else if (appliedCoupon.discount_type === 'fixed_cart') {
-            return Math.min(appliedCoupon.amount, totalCart) // Don't exceed cart total
-        } else if (appliedCoupon.discount_type === 'fixed_product') {
-            // Calculate discount per applicable product
-            return cartState.cartArray.reduce((discount, item) => {
-                if (appliedCoupon.product_ids.length === 0 || appliedCoupon.product_ids.includes(item.id)) {
-                    return discount + (appliedCoupon.amount * item.quantity)
-                }
-                return discount
-            }, 0)
-        }
-
-        return 0
-    }, [appliedCoupon, totalCart, cartState.cartArray])
+        return fromMinorUnit(cart.totals.total_discount, cart.totals.currency_minor_unit)
+    }, [cart.totals])
 
     const calculateTotalWithDiscountShippingAndTax = useCallback(() => {
         const discount = calculateDiscountAmount()
@@ -350,7 +307,7 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
         setIsSubmitting(true);
         setSubmitError(null);
 
-        const temporaryCartItems = [...cartState.cartArray];
+        const temporaryCartItems = [...cart.items];
 
         // Prepare the data payload for the createOrder server action
         const orderPayload: OrderData = {
@@ -383,29 +340,24 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
             customer_note: formData.customerNote || '',
         };
 
+        // No price/total sent here — WooCommerce computes authoritative pricing itself
+        // from product_id/variation_id, closing the gap where the client used to dictate price.
         const lineItems: LineItem[] = temporaryCartItems.map(item => ({
-            product_id: item.id,
-            variation_id: item.selectedVariation ? parseInt(item.selectedVariation?.id.toString()) : undefined,
+            product_id: item.type === 'variation' ? undefined : item.id,
+            variation_id: item.type === 'variation' ? item.id : undefined,
             quantity: item.quantity,
             name: item.name,
-            total: (Number(calculatePrice(item)) * item.quantity).toFixed(2),
-            price: Number(calculatePrice(item)).toFixed(2),
             meta_data: [
                 {
                     id: 0,
                     key: 'product_image',
-                    value: item.images[0].src || ''
+                    value: item.images[0]?.src || ''
                 },
-                ...(item.selectedColor ? [{
-                    id: 1,
-                    key: 'Color',
-                    value: item.selectedColor
-                }] : []),
-                ...(item.selectedSize ? [{
-                    id: 2,
-                    key: 'Size',
-                    value: item.selectedSize
-                }] : [])
+                ...item.variation.map((attr, i) => ({
+                    id: i + 1,
+                    key: attr.attribute,
+                    value: attr.value,
+                })),
             ]
         }));
 
@@ -422,7 +374,7 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
                 lineItems,
                 cart_tax: taxAmount,
                 shipping_lines: shippingLines,
-                coupon_lines: appliedCoupon ? [{ code: appliedCoupon.code }] : [],
+                coupon_lines: cart.coupons.map(c => ({ code: c.code })),
             });
 
             if (result.success && result.order) {
@@ -457,7 +409,7 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
         }
     };
 
-    if (cartState.cartArray.length === 0) {
+    if (cart.items.length === 0) {
         redirect('/cart'); // Redirect to cart if no items in cart
     }
 
@@ -473,7 +425,7 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
                             </Link>
                             <button className="max-md:hidden cart-icon flex items-center relative h-fit cursor-pointer" onClick={openModalCart}>
                                 <Icon.HandbagIcon size={24} color='black' />
-                                <span className="quantity cart-quantity absolute -right-1.5 -top-1.5 text-xs text-white bg-black w-4 h-4 flex items-center justify-center rounded-full">{cartState.cartArray.length}</span>
+                                <span className="quantity cart-quantity absolute -right-1.5 -top-1.5 text-xs text-white bg-black w-4 h-4 flex items-center justify-center rounded-full">{cart.items.length}</span>
                             </button>
                         </div>
                     </div>
@@ -694,87 +646,86 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
                     <div className="right justify-start flex-shrink-0 lg:w-[47%] bg-surface lg:py-20 py-12">
                         <div className="lg:sticky lg:top-24 h-fit lg:max-w-[606px] w-full flex-shrink-0 lg:pl-[80px] pr-[16px] max-lg:pl-[16px]">
                             <div className="list_prd flex flex-col gap-7">
-                                {cartState.cartArray.map((item) => (
-                                    <div key={item.id} className="item flex items-center justify-between gap-6">
-                                        <div className="flex items-center gap-6">
-                                            <div className="bg_img relative flex-shrink-0 w-[100px] h-[100px]">
-                                                <Image
-                                                    src={item.images[0]?.src || "/images/product/1000x1000.png"}
-                                                    fill={true}
-                                                    alt={item.name}
-                                                    className="w-full h-full object-cover rounded-lg"
-                                                />
-                                                <span className="quantity flex items-center justify-center absolute -top-3 -right-3 w-7 h-7 rounded-full bg-black text-white">
-                                                    {item.quantity}
-                                                </span>
-                                            </div>
-                                            <div>
-                                                <strong className="name text-title">{item.name}</strong>
-                                                <div className="flex items-center gap-2 mt-2">
-                                                    <Icon.Tag className="text-secondary" />
-                                                    <span className="code text-secondary">
-                                                        {item.sku || 'N/A'}
-                                                        {appliedCoupon && (
-                                                            <span className="discount"> (-{decodeHtmlEntities(currentCurrency?.symbol || '$')}{calculateDiscountAmount().toFixed(2)})</span>
-                                                        )}
+                                {cart.items.map((item) => {
+                                    const itemMinorUnit = item.prices.currency_minor_unit
+                                    const onSale = item.prices.sale_price !== item.prices.regular_price
+                                    return (
+                                        <div key={item.key} className="item flex items-center justify-between gap-6">
+                                            <div className="flex items-center gap-6">
+                                                <div className="bg_img relative flex-shrink-0 w-[100px] h-[100px]">
+                                                    <Image
+                                                        src={item.images[0]?.src || "/images/product/1000x1000.png"}
+                                                        fill={true}
+                                                        alt={item.name}
+                                                        className="w-full h-full object-cover rounded-lg"
+                                                    />
+                                                    <span className="quantity flex items-center justify-center absolute -top-3 -right-3 w-7 h-7 rounded-full bg-black text-white">
+                                                        {item.quantity}
                                                     </span>
                                                 </div>
+                                                <div>
+                                                    <strong className="name text-title">{decodeHtmlEntities(item.name)}</strong>
+                                                    <div className="flex items-center gap-2 mt-2">
+                                                        <Icon.Tag className="text-secondary" />
+                                                        <span className="code text-secondary">
+                                                            {item.sku || 'N/A'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-col gap-1">
+                                                {onSale && (
+                                                    <del className="caption1 text-secondary text-end org_price">
+                                                        {decodeHtmlEntities(currentCurrency?.symbol || '$')}{fromMinorUnit(item.prices.regular_price, itemMinorUnit).toFixed(2)}
+                                                    </del>
+                                                )}
+                                                <strong className="text-title price">
+                                                    {decodeHtmlEntities(currentCurrency?.symbol || '$')}{fromMinorUnit(item.prices.price, itemMinorUnit).toFixed(2)}
+                                                </strong>
                                             </div>
                                         </div>
-                                        <div className="flex flex-col gap-1">
-                                            {item.on_sale && item.sale_price && (
-                                                <del className="caption1 text-secondary text-end org_price">
-                                                    {decodeHtmlEntities(currentCurrency?.symbol || '$')}{Number(item.regular_price || item.price).toFixed(2)}
-                                                </del>
-                                            )}
-                                            <strong className="text-title price">
-                                                {decodeHtmlEntities(currentCurrency?.symbol || '$')}{Number(calculatePrice(item) || item.price).toFixed(2)}
-                                            </strong>
-                                        </div>
-                                    </div>
-                                ))}
+                                    )
+                                })}
                             </div>
-                            <form className="form_discount flex gap-3 mt-8" onSubmit={handleCouponApply}>
-                                <input
-                                    type="text"
-                                    placeholder="Discount code"
-                                    className="w-full border border-line rounded-lg px-4"
-                                    value={couponCode}
-                                    onChange={(e) => setCouponCode(e.target.value)}
-                                />
-                                <button type="submit" className="flex-shrink-0 button-main bg-black">
-                                    {appliedCoupon ? 'Applied' : 'Apply'}
-                                </button>
-                            </form>
-                            {couponError && (
-                                <div className="coupon-error mt-4 p-3 bg-red/10 border border-red rounded-lg">
-                                    <span className="text-red">{couponError}</span>
-                                </div>
-                            )}
-                            {appliedCoupon && (
-                                <div className="applied-coupon flex items-center justify-between mt-4 p-3 bg-green-200 border border-green-600 rounded-lg">
-                                    <span className="text-green-700 font-semibold">Coupon &quot;{appliedCoupon.code}&quot; applied</span>
+                            {cart.coupons.length > 0 ? (
+                                <div className="applied-coupon flex items-center justify-between mt-8 p-3 bg-green-200 border border-green-600 rounded-lg">
+                                    <span className="text-green-700 font-semibold">Coupon &quot;{cart.coupons[0].code}&quot; applied</span>
                                     <button
-                                        onClick={() => {
-                                            setAppliedCoupon(null)
-                                            setCouponError('')
-                                        }}
+                                        type="button"
+                                        onClick={handleCouponRemove}
+                                        disabled={isMutating}
                                         className="text-red hover:underline"
                                     >
                                         Remove
                                     </button>
+                                </div>
+                            ) : (
+                                <form className="form_discount flex gap-3 mt-8" onSubmit={handleCouponApply}>
+                                    <input
+                                        type="text"
+                                        placeholder="Discount code"
+                                        className="w-full border border-line rounded-lg px-4"
+                                        value={couponCode}
+                                        onChange={(e) => setCouponCode(e.target.value)}
+                                    />
+                                    <button type="submit" disabled={isApplyingCoupon} className="flex-shrink-0 button-main bg-black">
+                                        {isApplyingCoupon ? 'Applying...' : 'Apply'}
+                                    </button>
+                                </form>
+                            )}
+                            {couponError && (
+                                <div className="coupon-error mt-4 p-3 bg-red/10 border border-red rounded-lg">
+                                    <span className="text-red">{couponError}</span>
                                 </div>
                             )}
                             <div className="subtotal flex items-center justify-between mt-8">
                                 <strong className="heading6">Subtotal</strong>
                                 <strong className="heading6">{decodeHtmlEntities(currentCurrency?.symbol || '$')}{totalCart.toFixed(2)}</strong>
                             </div>
-                            {appliedCoupon && (
+                            {cart.coupons.length > 0 && (
                                 <div className="discount flex items-center justify-between mt-4">
-                                    <strong className="heading6">
-                                        Discount ({appliedCoupon.discount_type === 'percent' ? `${appliedCoupon.amount}%` : 'Fixed'})
-                                    </strong>
-                                    <strong className="heading6 text-green-700">{appliedCoupon && "-"}{decodeHtmlEntities(currentCurrency?.symbol || '$')}{calculateDiscountAmount().toFixed(2)}</strong>
+                                    <strong className="heading6">Discount</strong>
+                                    <strong className="heading6 text-green-700">-{decodeHtmlEntities(currentCurrency?.symbol || '$')}{calculateDiscountAmount().toFixed(2)}</strong>
                                 </div>
                             )}
                             <div className="ship-block flex items-center justify-between mt-4">
@@ -804,7 +755,7 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
                                     </strong>
                                 </div>
                             </div>
-                            {appliedCoupon && (
+                            {cart.coupons.length > 0 && (
                                 <div className="total-saving-block flex items-center gap-2 mt-4">
                                     <Icon.TagIcon weight='bold' className="text-xl" />
                                     <strong className="heading5">TOTAL SAVINGS</strong>

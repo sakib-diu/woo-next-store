@@ -24,6 +24,7 @@ import ReviewForm from '../ReviewForm'
 import { useCart } from '@/context/CartContext'
 import { useAppData } from '@/context/AppDataContext'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 
 
 
@@ -65,7 +66,7 @@ const Default: React.FC<Props> = ({ data, productId, variations, relatedProducts
     })
     const { currentCurrency } = useAppData()
     const { openModalCart } = useModalCartContext()
-    const { addToCart, cartState } = useCart();
+    const { addToCart } = useCart();
     const { addToWishlist, removeFromWishlist, wishlistState } = useWishlist()
     const { openModalWishlist } = useModalWishlistContext()
     const { addToCompare, removeFromCompare, compareState } = useCompare();
@@ -221,47 +222,34 @@ const Default: React.FC<Props> = ({ data, productId, variations, relatedProducts
 
     const handleIncreaseQuantity = () => {
         setQuantity(quantity + 1);
-        // updateCart(data.id, quantity + 1, activeSize, activeColor);
     };
 
     const handleDecreaseQuantity = () => {
         if (quantity > 1) {
             setQuantity(quantity - 1);
-            // updateCart(data.id, data.quantityPurchase - 1, activeSize, activeColor);
         }
     };
 
-    const handleAddToCart = () => {
+    const handleAddToCart = async () => {
         const cartVariation = findMatchingVariation()
+        const result = await addToCart(cartVariation ? cartVariation.id : data.id, quantity)
 
-        // if ((isColorReq && activeColor) && (isSizeReq && activeSize))
-
-        addToCart(
-            data, // The base product data
-            quantity,
-            activeSize,
-            activeColor,
-            cartVariation?.id?.toString(),
-            cartVariation ?? undefined
-        );
-        openModalCart()
+        if (result.success) {
+            openModalCart()
+        } else {
+            toast.error(result.error || 'Could not add this item to your cart.')
+        }
     };
 
-    const handleBuyNow = () => {
+    const handleBuyNow = async () => {
         const cartVariation = findMatchingVariation()
+        const result = await addToCart(cartVariation ? cartVariation.id : data.id, quantity)
 
-        // if ((isColorReq && activeColor) && (isSizeReq && activeSize))
-
-        addToCart(
-            data, // The base product data
-            quantity,
-            activeSize,
-            activeColor,
-            cartVariation?.id?.toString(),
-            cartVariation ?? undefined
-        );
-
-        router.push("/checkout");
+        if (result.success) {
+            router.push("/checkout");
+        } else {
+            toast.error(result.error || 'Could not add this item to your cart.')
+        }
     };
 
     const handleAddToWishlist = () => {

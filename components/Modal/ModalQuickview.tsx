@@ -21,6 +21,7 @@ import ModalSizeguide from './ModalSizeguide';
 import VariationSkeleton from '../Other/VariationSkeleton';
 import parse from 'html-react-parser';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 
 const ModalQuickview = () => {
     const [photoIndex, setPhotoIndex] = useState(0)
@@ -34,7 +35,7 @@ const ModalQuickview = () => {
     const [quantity, setQuantity] = useState(1)
     const [selectedVariation, setSelectedVariation] = useState<VariationProduct | null>(null)
     const { currentCurrency } = useAppData()
-    const { addToCart, updateCart, cartState } = useCart()
+    const { addToCart } = useCart()
     const { openModalCart } = useModalCartContext()
     const { addToWishlist, removeFromWishlist, wishlistState } = useWishlist()
     const { openModalWishlist } = useModalWishlistContext()
@@ -173,37 +174,31 @@ const ModalQuickview = () => {
         }
     };
 
-    const handleAddToCart = () => {
-        if (selectedProduct) {
-            const cartVariation = findMatchingVariation()
+    const handleAddToCart = async () => {
+        if (!selectedProduct) return
 
-            addToCart(
-                selectedProduct as unknown as ProductType2, // The base product data
-                quantity,
-                activeSize,
-                activeColor,
-                cartVariation?.id?.toString(),
-                cartVariation ?? undefined
-            );
+        const cartVariation = findMatchingVariation()
+        const result = await addToCart(cartVariation ? cartVariation.id : selectedProduct.id, quantity)
+
+        if (result.success) {
             openModalCart()
             closeQuickview()
+        } else {
+            toast.error(result.error || 'Could not add this item to your cart.')
         }
     };
 
-    const handleBuyNow = () => {
-        if (selectedProduct) {
-            const cartVariation = findMatchingVariation()
+    const handleBuyNow = async () => {
+        if (!selectedProduct) return
 
-            addToCart(
-                selectedProduct as unknown as ProductType2, // The base product data
-                quantity,
-                activeSize,
-                activeColor,
-                cartVariation?.id?.toString(),
-                cartVariation ?? undefined
-            );
+        const cartVariation = findMatchingVariation()
+        const result = await addToCart(cartVariation ? cartVariation.id : selectedProduct.id, quantity)
+
+        if (result.success) {
             router.push("/checkout")
             closeQuickview()
+        } else {
+            toast.error(result.error || 'Could not add this item to your cart.')
         }
     }
 

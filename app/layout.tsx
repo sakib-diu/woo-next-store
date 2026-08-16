@@ -22,6 +22,7 @@ import '@/styles/styles.scss';
 import NextTopLoader from 'nextjs-toploader';
 import { Instrument_Sans } from 'next/font/google';
 import { Metadata } from 'next';
+import { Toaster } from 'sonner';
 import { STOREINFO } from '../constant/storeConstants';
 
 const instrument = Instrument_Sans({ subsets: ['latin'] });
@@ -82,6 +83,7 @@ export default async function RootLayout({
     <html lang="en">
       <body className={instrument.className}>
         <NextTopLoader color="#9ad346" showSpinner={false} height={3} />
+        <Toaster position="top-center" richColors />
         <AuthProvider initialUser={initialUser}>
           <CartProvider>
             <AppDataProvider

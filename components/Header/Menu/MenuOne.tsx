@@ -34,7 +34,7 @@ const MenuOne: React.FC<Props> = ({ props, categories }) => {
     const [openSubNavMobile, setOpenSubNavMobile] = useState<number | null>(null)
     const [mobilesearch, setMobileSearch] = useState<string>("")
     const { openModalCart } = useModalCartContext()
-    const { cartState } = useCart()
+    const { cart } = useCart()
     const { openModalWishlist } = useModalWishlistContext()
     const { openModalSearch } = useModalSearchContext()
     const { user, isAuthenticated, logout, loading } = useAuth()
@@ -202,7 +202,7 @@ const MenuOne: React.FC<Props> = ({ props, categories }) => {
                                 </div>
                                 <div className="cart-icon flex items-center relative cursor-pointer" onClick={openModalCart}>
                                     <Icon.HandbagIcon size={24} color='black' />
-                                    <span className="quantity cart-quantity absolute -right-1.5 -top-1.5 text-xs text-white bg-black w-4 h-4 flex items-center justify-center rounded-full">{cartState.cartArray.length}</span>
+                                    <span className="quantity cart-quantity absolute -right-1.5 -top-1.5 text-xs text-white bg-black w-4 h-4 flex items-center justify-center rounded-full">{cart.items.length}</span>
                                 </div>
                             </div>
                         </div>
@@ -319,7 +319,7 @@ const MenuOne: React.FC<Props> = ({ props, categories }) => {
                     <Link href={PATH.CART} className='menu_bar-link flex flex-col items-center gap-1'>
                         <div className="icon relative">
                             <Icon.HandbagIcon weight='bold' className='text-2xl' />
-                            <span className="quantity cart-quantity absolute -right-1.5 -top-1.5 text-xs text-white bg-black w-4 h-4 flex items-center justify-center rounded-full">{cartState.cartArray.length}</span>
+                            <span className="quantity cart-quantity absolute -right-1.5 -top-1.5 text-xs text-white bg-black w-4 h-4 flex items-center justify-center rounded-full">{cart.items.length}</span>
                         </div>
                         <span className="menu_bar-title caption2 font-semibold">Cart</span>
                     </Link>

@@ -16,6 +16,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import React, { useEffect, useState } from 'react'
 import Marquee from 'react-fast-marquee'
+import { toast } from 'sonner'
 import { useAppData } from '../../context/AppDataContext'
 import { QuickShopDrawer } from './QuickShopDrawer'
 
@@ -155,19 +156,14 @@ const Product: React.FC<ProductProps> = ({ data, type, style }) => {
         }
     };
 
-    const handleAddToCart = () => {
-        // Call the single, updated function from the context
-        addToCart(
-            data, // The base product data
-            1,    // The quantity to add
-            activeSize,
-            activeColor,
-            selectedVariation?.id?.toString(),
-            selectedVariation ?? undefined
-        );
+    const handleAddToCart = async () => {
+        const result = await addToCart(selectedVariation ? selectedVariation.id : data.id, 1);
 
-        // Open the modal
-        openModalCart();
+        if (result.success) {
+            openModalCart();
+        } else {
+            toast.error(result.error || 'Could not add this item to your cart.');
+        }
     };
 
     const handleAddToWishlist = () => {

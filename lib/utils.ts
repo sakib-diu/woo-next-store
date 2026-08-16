@@ -1,4 +1,3 @@
-import { CartItem } from "@/context/CartContext"
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
 
@@ -82,26 +81,8 @@ export function formatPrice(price: number | string): string {
 
 }
 
-export const calculatePrice = (product: CartItem) => {
-  let price: string | number | undefined;
-
-  if (product.selectedColor || product.selectedSize) {
-    if (product.selectedVariation?.on_sale) {
-      price = product.selectedVariation.sale_price;
-    } else if ((product.selectedColor || product.selectedSize) && !product.selectedVariation) {
-      price = product.price
-    } else {
-      price = product.selectedVariation?.regular_price ?? product.selectedVariation?.price;
-    }
-  } else {
-    if (product.on_sale) {
-      price = product.sale_price;
-    } else {
-      price = product.regular_price ?? product.price;
-    }
-  }
-
-  // Convert to number and ensure we have a valid price
-  const numericPrice = typeof price === "string" ? Number.parseFloat(price) : price;
-  return numericPrice && numericPrice > 0 ? numericPrice : 0;
+// Store API money fields are minor-unit strings (e.g. "1998" = $19.98 when minorUnit is 2).
+export function fromMinorUnit(amount: string | number, minorUnit: number): number {
+  const numericAmount = typeof amount === "string" ? Number.parseFloat(amount) : amount;
+  return numericAmount / Math.pow(10, minorUnit);
 }
