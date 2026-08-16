@@ -1,5 +1,5 @@
 import { getProductCategories, getProductTags } from '@/actions/data-actions'
-import { getAllProductsPaginated } from '@/actions/products-actions'
+import { getProducts } from '@/actions/products-actions'
 import Footer from '@/components/Footer/Footer'
 import Banner from '@/components/Home/Banner'
 import Benefit from '@/components/Home/Benefit'
@@ -39,12 +39,14 @@ export const metadata: Metadata = {
 
 export default async function HomeTwo() {
 
-  // const { products } = await getAllProductsPaginated();
+  // These sections show a handful of products (8) picked client-side from a few tabs
+  // (on sale / new arrivals / best sellers / category), so a bounded recent pool is
+  // fetched once here rather than the entire catalog.
   const [
     productsResult,
     categoriesResult
   ] = await Promise.allSettled([
-    getAllProductsPaginated(),
+    getProducts({ perPage: 100, orderby: 'date', order: 'desc' }),
     getProductCategories()
   ]);
 

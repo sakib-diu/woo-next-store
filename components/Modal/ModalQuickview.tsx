@@ -12,7 +12,7 @@ import { useAppData } from '@/context/AppDataContext';
 import { ProductType } from '@/types/ProductType';
 import { Product as ProductType2, VariationProduct } from '@/types/product-type';
 import { decodeHtmlEntities } from '@/lib/utils';
-import { getProductVariationsById } from '@/actions/products-actions';
+import { useProductVariations } from '@/hooks/useProductVariations';
 import * as Icon from "@phosphor-icons/react/dist/ssr";
 import Image from 'next/image';
 import React, { useState, useEffect, useCallback } from 'react';
@@ -26,9 +26,9 @@ const ModalQuickview = () => {
     const [photoIndex, setPhotoIndex] = useState(0)
     const [openPopupImg, setOpenPopupImg] = useState(false)
     const [openSizeGuide, setOpenSizeGuide] = useState<boolean>(false)
-    const [variations, setVariations] = useState<VariationProduct[]>([])
-    const [isLoadingVariations, setIsLoadingVariations] = useState(false)
     const { selectedProduct, closeQuickview } = useModalQuickviewContext()
+    const hasVariations = !!selectedProduct?.id && (selectedProduct.variations?.length ?? 0) > 0
+    const { variations, isLoading: isLoadingVariations } = useProductVariations(selectedProduct?.id ?? 0, hasVariations)
     const [activeColor, setActiveColor] = useState<string>('')
     const [activeSize, setActiveSize] = useState<string>('')
     const [quantity, setQuantity] = useState(1)
@@ -46,50 +46,8 @@ const ModalQuickview = () => {
     const isSizeReq = selectedProduct?.attributes?.some(attr => attr.name.toLowerCase() === "size") || false
 
 
-    // useEffect(() => {
-    //     let isMounted = true;
-    //     fetchVariations()
-    //     // loadVariations();
-    //     return () => { isMounted = false; };
-    // }, []);
-
-
-
-
-    // Fetch variations ONLY when the selected product changes
+    // Reset the active attributes and quantity when the selected product changes
     useEffect(() => {
-        const fetchVariations = async () => {
-            // Exit if there's no product or it has no variation IDs to fetch
-            if (!selectedProduct?.id || selectedProduct.variations.length === 0) {
-                setVariations([]); // Clear out old variations
-                setIsLoadingVariations(false);
-                return;
-            }
-
-            console.log('Fetching variations for product:', selectedProduct.id);
-            setIsLoadingVariations(true);
-            try {
-                const result = await getProductVariationsById({ id: selectedProduct.id.toString() });
-                if (result.status === "OK" && result.variations) {
-                    setVariations(result.variations);
-                    console.log('Fetched variations:', result.variations);
-                } else {
-                    console.log('Failed to fetch variations:', result.status);
-                    setVariations([]); // Clear on failure to avoid stale data
-                }
-            } catch (error) {
-                console.error('Error fetching variations:', error);
-                setVariations([]); // Also clear on error
-            } finally {
-                // The loading state is set here or after variations are set in the next effect.
-                // For simplicity, we can do it here.
-                setIsLoadingVariations(false);
-            }
-        };
-
-        fetchVariations();
-
-        // Also, reset the active attributes and quantity when the product changes
         if (selectedProduct) {
             const colorAttr = selectedProduct.attributes?.find(attr => attr.name.toLowerCase() === "color");
             setActiveColor(colorAttr?.options[0] || '');
@@ -259,7 +217,6 @@ const ModalQuickview = () => {
 
     const handleClose = () => {
         // ✨ 2. Reset all local state to its initial state
-        setVariations([]);
         setSelectedVariation(null);
         setActiveColor('');
         setActiveSize('');

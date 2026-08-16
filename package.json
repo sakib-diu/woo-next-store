@@ -57,6 +57,7 @@
     "sonner": "^2.0.8",
     "stripe": "^18.3.0",
     "swiper": "^12.2.0",
+    "swr": "^2.5.1",
     "tailwind-merge": "^3.2.0",
     "tailwindcss-animate": "^1.0.7",
     "validator": "^13.15.35",

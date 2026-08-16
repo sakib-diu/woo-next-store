@@ -2,7 +2,7 @@
 
 import { Product, ProductReview, VariationProduct } from "@/types/product-type";
 import WooCommerceRestApi from "@woocommerce/woocommerce-rest-api";
-import { revalidatePath } from "next/cache";
+import { revalidateTag, unstable_cache } from "next/cache";
 
 const WooCommerce = new WooCommerceRestApi({
   url: process.env.WORDPRESS_SITE_URL as string,
@@ -11,19 +11,30 @@ const WooCommerce = new WooCommerceRestApi({
   version: "wc/v3",
 });
 
-export const getProductById = async ({ id }: { id: string }): Promise<{ product: Product, status: "OK" | "ERROR" }> => {
+const PRODUCTS_TAG = "products";
+const PRODUCTS_REVALIDATE_SECONDS = 60;
+const VARIATIONS_REVALIDATE_SECONDS = 60;
+const REVIEWS_REVALIDATE_SECONDS = 30;
+
+export const getProductById = async ({ id }: { id: string }): Promise<{ product: Product | null, status: "OK" | "ERROR" }> => {
   try {
-    const response = await WooCommerce.get(`products/${id}`, {
-      cache: 'no-store'
-    });
+    const getCached = unstable_cache(
+      async () => {
+        const response = await WooCommerce.get(`products/${id}`);
+        return response.data as Product;
+      },
+      ["product-by-id", id],
+      { revalidate: PRODUCTS_REVALIDATE_SECONDS, tags: [PRODUCTS_TAG, `product-${id}`] }
+    );
+    const product = await getCached();
     return {
-      product: response.data,
+      product,
       status: "OK"
     }
   } catch (error) {
     console.log(`Error fetching product by id ${id}:`, error)
     return {
-      product: {} as Product,
+      product: null,
       status: "ERROR"
     }
   }
@@ -31,12 +42,19 @@ export const getProductById = async ({ id }: { id: string }): Promise<{ product:
 
 export const getProductVariationsById = async ({ id }: { id: string }): Promise<{ variations?: VariationProduct[], status: "OK" | "ERROR" }> => {
   try {
-    const response = await WooCommerce.get(`products/${id}/variations`, {
-      per_page: 100,
-      cache: "default", next: { revalidate: 100 }
-    });
+    const getCached = unstable_cache(
+      async () => {
+        const response = await WooCommerce.get(`products/${id}/variations`, {
+          per_page: 100,
+        });
+        return response.data as VariationProduct[];
+      },
+      ["product-variations-by-id", id],
+      { revalidate: VARIATIONS_REVALIDATE_SECONDS, tags: [PRODUCTS_TAG, `product-${id}`, `product-${id}-variations`] }
+    );
+    const variations = await getCached();
     return {
-      variations: response.data,
+      variations,
       status: "OK"
     }
   } catch (error) {
@@ -48,84 +66,136 @@ export const getProductVariationsById = async ({ id }: { id: string }): Promise<
   }
 }
 
+export type ProductSortOption = 'date' | 'price' | 'popularity' | 'rating' | 'title';
 
-export const getAllProductsPaginated = async ({
-  params,
-}: {
-  params?: { category?: string; search?: string; tag?: string; include?: Array<number> };
-} = {}): Promise<{
+export type ProductQueryParams = {
+  page?: number;
+  perPage?: number;
+  categoryIds?: number[];
+  tagIds?: number[];
+  brandIds?: number[];
+  /** Global product attribute taxonomy slug, e.g. "pa_size". WooCommerce's REST API only supports
+   * filtering by a single attribute taxonomy per request, so when both size and color are selected
+   * only one can be pushed down to the API; the other is left to the caller to reconcile. */
+  attributeSlug?: string;
+  attributeTermId?: number;
+  minPrice?: number;
+  maxPrice?: number;
+  onSale?: boolean;
+  search?: string;
+  orderby?: ProductSortOption;
+  order?: 'asc' | 'desc';
+  include?: number[];
+};
+
+/**
+ * Fetches a single page of products from WooCommerce with server-side filtering,
+ * using the site's native `page`/`per_page` REST pagination instead of pulling
+ * the entire catalog into memory.
+ */
+export const getProducts = async (query: ProductQueryParams = {}): Promise<{
   products: Product[];
   totalItems: number;
+  totalPages: number;
   status: 'OK' | 'ERROR';
 }> => {
-  let allProducts: Product[] = [];
-  let page = 1;
-  let totalPages = 1;
-  let totalItems = 0;
+  const {
+    page = 1,
+    perPage = 9,
+    categoryIds,
+    tagIds,
+    brandIds,
+    attributeSlug,
+    attributeTermId,
+    minPrice,
+    maxPrice,
+    onSale,
+    search,
+    orderby,
+    order,
+    include,
+  } = query;
 
   try {
-    do {
-      const response = await WooCommerce.get("products", {
-        per_page: 100,
-        page: page,
-        cache: "default", next: { revalidate: 100 },
-        ...(params?.category && { category: params.category }),
-        ...(params?.search && { search: params.search }),
-        ...(params?.tag && { tag: params.tag }),
-        ...(params?.include && { include: params.include.join(',') }),
-      });
+    const getCached = unstable_cache(
+      async () => {
+        const response = await WooCommerce.get("products", {
+          per_page: perPage,
+          page,
+          ...(categoryIds?.length && { category: categoryIds.join(',') }),
+          ...(tagIds?.length && { tag: tagIds.join(',') }),
+          ...(brandIds?.length && { brand: brandIds.join(',') }),
+          ...(attributeSlug && attributeTermId && { attribute: attributeSlug, attribute_term: attributeTermId }),
+          ...(minPrice !== undefined && { min_price: minPrice }),
+          ...(maxPrice !== undefined && { max_price: maxPrice }),
+          ...(onSale !== undefined && { on_sale: onSale }),
+          ...(search && { search }),
+          ...(orderby && { orderby }),
+          ...(order && { order }),
+          ...(include?.length && { include: include.join(',') }),
+        });
 
-      if (response.data && Array.isArray(response.data)) {
-        allProducts = allProducts.concat(response.data);
-      }
+        const totalItems = parseInt(response.headers?.['x-wp-total'] ?? '0', 10) || 0;
+        const totalPages = parseInt(response.headers?.['x-wp-totalpages'] ?? '0', 10) || 0;
 
-      if (page === 1 && response.headers) {
-        if (response.headers['x-wp-totalpages']) {
-          totalPages = parseInt(response.headers['x-wp-totalpages'], 10);
-        }
-        if (response.headers['x-wp-total']) {
-          totalItems = parseInt(response.headers['x-wp-total'], 10);
-        }
-      }
+        return {
+          products: (response.data ?? []) as Product[],
+          totalItems,
+          totalPages,
+        };
+      },
+      ["products-query", JSON.stringify(query)],
+      { revalidate: PRODUCTS_REVALIDATE_SECONDS, tags: [PRODUCTS_TAG] }
+    );
 
-      page++;
-    } while (page <= totalPages);
-
-    return {
-      products: allProducts,
-      totalItems: totalItems,
-      status: 'OK',
-    };
+    const result = await getCached();
+    return { ...result, status: 'OK' };
   } catch (error) {
-    console.error(`Error fetching all paginated products:`, error);
-    return {
-      products: [],
-      totalItems: 0,
-      status: 'ERROR',
-    };
+    console.error(`Error fetching products:`, error);
+    return { products: [], totalItems: 0, totalPages: 0, status: 'ERROR' };
   }
+};
+
+/**
+ * Fetches a bounded set of products by ID (e.g. related/upsell products). Unlike `getProducts`,
+ * this is not meant for catalog browsing — callers should pass a small, already-known ID list.
+ */
+export const getProductsByIds = async (ids: number[]): Promise<{
+  products: Product[];
+  status: 'OK' | 'ERROR';
+}> => {
+  if (ids.length === 0) {
+    return { products: [], status: 'OK' };
+  }
+
+  const result = await getProducts({ include: ids, perPage: Math.min(ids.length, 100) });
+  return { products: result.products, status: result.status };
 };
 
 export async function getProductReviews(productId: number) {
   try {
-    // Validate productId
     if (!productId || isNaN(productId)) {
       throw new Error("Invalid product ID");
     }
 
-    // Make API request to get reviews with no-cache headers
-    const response = await WooCommerce.get("products/reviews", {
-      product: productId,
-      per_page: 100,
-      cache: 'force-cache', next: { revalidate: 30 }
-      // _nocache: Date.now(), // Append timestamp to prevent caching
-    });
+    const getCached = unstable_cache(
+      async () => {
+        const response = await WooCommerce.get("products/reviews", {
+          product: productId,
+          per_page: 100,
+        });
+        return response.data as ProductReview[];
+      },
+      ["product-reviews", String(productId)],
+      { revalidate: REVIEWS_REVALIDATE_SECONDS, tags: [PRODUCTS_TAG, `product-${productId}`, `product-${productId}-reviews`] }
+    );
 
-    // Check if response contains reviews
-    if (response.data && response.data.length > 0) {
+    const reviews = await getCached();
+
+    if (reviews && reviews.length > 0) {
       return {
         success: true,
-        reviews: response.data,
+        reviews,
       };
     } else {
       return {
@@ -196,7 +266,7 @@ export async function createProductReview(reviewData: {
       verified: response.data.verified,
     };
 
-    revalidatePath('/products/[id]')
+    revalidateTag(`product-${reviewData.productId}-reviews`);
     return {
       success: true,
       review: createdReview,

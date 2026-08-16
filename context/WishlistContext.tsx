@@ -2,7 +2,7 @@
 
 import { Product as ProductType } from '@/types/product-type';
 import React, { createContext, useContext, useEffect, useReducer } from 'react';
-import { getAllProductsPaginated } from '@/actions/products-actions'; // Import your server action
+import { getProductsByIds } from '@/actions/products-actions';
 
 // Interfaces and Types remain the same
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
@@ -99,7 +99,7 @@ export const WishlistProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 console.log("Refreshing wishlist data...");
                 try {
                     const ids = wishlistState.wishlistArray.map(item => item.id);
-                    const { products, status } = await getAllProductsPaginated({ params: { include: ids } });
+                    const { products, status } = await getProductsByIds(ids);
 
                     if (status === 'OK' && products.length > 0) {
                         dispatch({ type: 'LOAD_WISHLIST', payload: products });

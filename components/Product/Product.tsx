@@ -1,12 +1,12 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 'use client'
-import { getProductVariationsById } from '@/actions/products-actions'
 import { useCart } from '@/context/CartContext'
 import { useModalCartContext } from '@/context/ModalCartContext'
 import { useModalQuickviewContext } from '@/context/ModalQuickviewContext'
 import { useModalWishlistContext } from '@/context/ModalWishlistContext'
 import { useWishlist } from '@/context/WishlistContext'
 import { COLORS } from '@/data/color-codes'
+import { useProductVariations } from '@/hooks/useProductVariations'
 import { decodeHtmlEntities } from '@/lib/utils'
 import { Product as ProductType, VariationProduct } from '@/types/product-type'
 import * as Icon from "@phosphor-icons/react/dist/ssr"
@@ -14,7 +14,7 @@ import { isNull } from 'lodash'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import Marquee from 'react-fast-marquee'
 import { useAppData } from '../../context/AppDataContext'
 import { QuickShopDrawer } from './QuickShopDrawer'
@@ -46,7 +46,8 @@ const WishlistToggle: React.FC<WishlistToggleProps> = ({ isActive, sizeClass, on
 )
 
 const Product: React.FC<ProductProps> = ({ data, type, style }) => {
-    const [variations, setVariations] = useState<VariationProduct[]>([])
+    const hasVariations = data.attributes?.length > 0 && data.variations?.length > 0
+    const { variations, isLoading: isLoadingVariations } = useProductVariations(data.id, hasVariations)
     const [selectedVariation, setSelectedVariation] = useState<VariationProduct | null>(null);
     const [actionType, setActionType] = useState<string>("add to cart")
     const [mobileActionType, setMobileActionType] = useState<string>("add to cart")
@@ -80,29 +81,16 @@ const Product: React.FC<ProductProps> = ({ data, type, style }) => {
     const isInWishlist = wishlistState.wishlistArray.some(item => item.id.toString() === data.id.toString())
 
     useEffect(() => {
-        fetchVariations()
-    }, []);
+        if (data.attributes?.length > 1 || (data.attributes.some(attr => attr.name.toLowerCase().includes("size"))) && data.attributes?.length === 1) { setActionType("quick shop") };
+        if (data.attributes?.length > 0) { setMobileActionType("quick shop") };
+    }, [data.attributes]);
 
     useEffect(() => {
         if (data.attributes?.length > 0) {
             const matchingVariation = findMatchingVariation();
             setSelectedVariation(matchingVariation);
         }
-    }, [activeColor, activeSize]);
-
-
-    const fetchVariations = useCallback(async () => {
-        if (data.attributes?.length > 1 || (data.attributes.some(attr => attr.name.toLowerCase().includes("size"))) && data.attributes?.length === 1) { setActionType("quick shop") };
-        if (data.attributes?.length > 0) { setMobileActionType("quick shop") };
-
-        if (data.attributes?.length > 0) {
-            const response = await getProductVariationsById({ id: data.id.toString() });
-            if (response.status === 'OK') {
-                setVariations(response.variations!);
-            }
-        }
-
-    }, [])
+    }, [activeColor, activeSize, variations]);
 
     // Find matching variation based on activeColor or activeSize
     const findMatchingVariation = () => {
@@ -485,7 +473,7 @@ const Product: React.FC<ProductProps> = ({ data, type, style }) => {
                         </div>
                         <div className={` text-title duration-300 ${data.attributes.some(attr => attr.name.toLowerCase().includes("color")) ? "product-name" : "product-name-only"} `}>{data.name}</div>
                         {data.attributes?.length > 0 &&
-                            <div className=" list-color py-2 !max-lg:hidden flex items-center gap-2 flex-wrap duration-500">
+                            <div className={`list-color py-2 !max-lg:hidden flex items-center gap-2 flex-wrap duration-500 ${isLoadingVariations ? 'opacity-50 pointer-events-none' : ''}`}>
                                 {colorAttribute?.options.map((item: string, index: number) => (
                                     <div
                                         key={index}

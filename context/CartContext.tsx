@@ -2,7 +2,6 @@
 
 import { Product as ProductType, VariationProduct } from '@/types/product-type';
 import React, { createContext, useContext, useEffect, useReducer, useState } from 'react';
-import { getAllProductsPaginated } from '@/actions/products-actions';
 
 // --- Interfaces ---
 export interface CartItem extends ProductType {

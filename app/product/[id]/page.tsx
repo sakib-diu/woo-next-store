@@ -1,19 +1,24 @@
 
 
-import { getAllProductsPaginated, getProductById, getProductReviews, getProductVariationsById } from '@/actions/products-actions';
+import { getProductById, getProductReviews, getProductsByIds, getProductVariationsById } from '@/actions/products-actions';
 import BreadcrumbProduct from '@/components/Breadcrumb/BreadcrumbProduct';
 import Footer from '@/components/Footer/Footer';
 import MenuOne from '@/components/Header/Menu/MenuOne';
 import TopNavOne from '@/components/Header/TopNav/TopNavOne';
 import Default from '@/components/Product/Detail/Default';
 import { Metadata } from 'next';
+import { cache } from 'react';
 import { notFound } from 'next/navigation';
 import { getProductCategories } from '../../../actions/data-actions';
 import { STOREINFO } from '../../../constant/storeConstants';
 
+// Deduped per request: generateMetadata and the page body both need the same
+// product, and this ensures they only trigger one WooCommerce call between them.
+const getProductByIdCached = cache(getProductById);
+
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
     const { id } = await params;
-    const { product, status } = await getProductById({ id });
+    const { product, status } = await getProductByIdCached({ id });
 
     if (status === "ERROR" || !product) {
         return {
@@ -46,21 +51,18 @@ const ProductDefault = async ({ params }: ProductDefaultProps) => {
     const { id: productId } = await params || "1";
 
     const [{ product, status }, { variations }, { reviews }, categories] = await Promise.all([
-        getProductById({ id: productId }),
+        getProductByIdCached({ id: productId }),
         getProductVariationsById({ id: productId }),
         getProductReviews(Number(productId)),
         getProductCategories(),
     ])
 
-    const include = product.related_ids?.map((item) => Number(item))
-
-    const { products: relatedProducts } = await getAllProductsPaginated({ params: { include } });
-
-    // console.log(variations)
-
     if (status === "ERROR" || !product) {
         notFound()
     }
+
+    const relatedIds = product.related_ids?.map((item) => Number(item)) ?? []
+    const { products: relatedProducts } = await getProductsByIds(relatedIds);
 
     return (
         <>
