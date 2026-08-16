@@ -11,6 +11,7 @@ export const PATH = {
     LOGIN: '/login',
     REGISTER: '/register',
     ForgotPassword: '/forgot-password',
+    RESET_PASSWORD: '/reset-password',
     DASHBOARD: '/dashboard',
     WISHLIST: '/wishlist',
     PRIVACY_POLICY: '/privacy-policy',

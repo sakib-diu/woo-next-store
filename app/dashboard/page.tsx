@@ -2,7 +2,7 @@ import React from 'react'
 import { redirect } from 'next/navigation'
 import { fetchProfileData } from '@/actions/customer-action'
 import DashboardClient from '@/components/Dashboard/DashboardClient'
-import { cookies } from 'next/headers'
+import { getSession } from '@/lib/session'
 import TopNavOne from '../../components/Header/TopNav/TopNavOne'
 import Breadcrumb from '../../components/Breadcrumb/Breadcrumb'
 import Footer from '../../components/Footer/Footer'
@@ -24,26 +24,18 @@ interface DashboardPageProps {
 const Dashboard = async ({ searchParams }: DashboardPageProps) => {
     const { tab = 'dashboard' } = await searchParams
 
-    // Get userId from cookies (JWT token contains user info)
-    const cookieStore = await cookies()
-    const userCookie = cookieStore.get('user')
-
-    const [categories] = await Promise.all([
-        getProductCategories()
+    const [categories, session] = await Promise.all([
+        getProductCategories(),
+        getSession(),
     ])
 
-    if (!userCookie) {
+    if (!session.isLoggedIn || !session.userId) {
         redirect('/login')
     }
 
+    const userId = session.userId
+
     try {
-        const userData = JSON.parse(userCookie.value)
-        const userId = userData.user_id
-
-        if (!userId) {
-            redirect('/login')
-        }
-
         // Fetch all required data server-side
         const profileData = await fetchProfileData(userId)
 

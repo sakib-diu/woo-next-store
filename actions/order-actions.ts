@@ -3,9 +3,9 @@
 import { OrderData, orderDataSchema } from "@/lib/validations/validation";
 import { LineItem, OrderType } from "@/types/order-type";
 import WooCommerceRestApi from "@woocommerce/woocommerce-rest-api";
-import Cookies from "js-cookie";
+import { getSession } from "@/lib/session";
 import { revalidatePath } from "next/cache";
-import { cookies, headers } from "next/headers";
+import { headers } from "next/headers";
 
 
 const WooCommerce = new WooCommerceRestApi({
@@ -34,9 +34,8 @@ export async function createOrder({
 
     const validatedData = orderDataSchema.parse(orderData)
 
-    const storedUser = (await cookies()).get("user")?.value
-    // const email = JSON.parse(storedUser!).user_email
-    const userId = storedUser ? (JSON.parse(storedUser).user_id || 0) : 0;
+    const session = await getSession();
+    const userId = session.isLoggedIn ? (session.userId || 0) : 0;
     const headersList = await headers();
     const ip = headersList.get('x-forwarded-for')
 

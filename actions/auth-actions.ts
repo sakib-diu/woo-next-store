@@ -1,15 +1,30 @@
 "use server"
 
-import Cookies from "js-cookie";
-import z from "zod";
+import { graphqlRequest } from "@/lib/graphql-client";
+import { getSession } from "@/lib/session";
+import { verifyWpJwt } from "@/lib/jwt";
+import { requestPasswordResetSchema, confirmPasswordResetSchema } from "../lib/validations/resetPasswordValidation";
 import dns from 'dns/promises';
-import { requestOtpSchema, verifyOtpSchema, resetPasswordSchema } from "../lib/validations/resetPasswordValidation";
 
+const wordpressSiteUrl = process.env.WORDPRESS_SITE_URL;
+
+if (!wordpressSiteUrl) {
+    throw new Error("WORDPRESS_SITE_URL is not defined in environment variables");
+}
+
+async function isEmailDomainReal(email: string): Promise<boolean> {
+    try {
+        const domain = email.split('@')[1];
+        const addresses = await dns.resolveMx(domain);
+        return addresses && addresses.length > 0;
+    } catch (error) {
+        return false; // Domain does not exist or has no MX records
+    }
+}
 
 export interface AuthResponse {
     success: boolean;
     message: string;
-    token?: string;
     user_id?: number;
     user_email?: string;
     user_display_name?: string;
@@ -27,149 +42,137 @@ export interface PasswordResetResponse {
     resetComplete?: boolean;
 }
 
-const wordpressSiteUrl = process.env.WORDPRESS_SITE_URL;
-
-if (!wordpressSiteUrl) {
-    throw new Error("WORDPRESS_SITE_URL is not defined in environment variables");
+interface RegisterPayload {
+    registerUser: {
+        user: {
+            databaseId: number;
+        };
+    };
 }
 
-
-async function apiCall(endpoint: string, body: object) {
-    try {
-        const response = await fetch(`${wordpressSiteUrl}/wp-json/custom/v1${endpoint}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-            cache: 'no-store', // Ensure fresh data for auth actions
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-            return { error: data.message || 'An unknown server error occurred.' };
-        }
-        return { success: data.message };
-    } catch (error) {
-        return { error: 'Could not connect to the server. Please try again.' };
+const REGISTER_MUTATION = /* GraphQL */ `
+  mutation RegisterUser($username: String!, $email: String!, $password: String!) {
+    registerUser(input: { username: $username, email: $email, password: $password }) {
+      user {
+        databaseId
+      }
     }
-}
+  }
+`;
 
-async function isEmailDomainReal(email: string): Promise<boolean> {
-    try {
-        const domain = email.split('@')[1];
-        const addresses = await dns.resolveMx(domain);
-        return addresses && addresses.length > 0;
-    } catch (error) {
-        return false; // Domain does not exist or has no MX records
+const SEND_PASSWORD_RESET_EMAIL_MUTATION = /* GraphQL */ `
+  mutation SendPasswordResetEmail($username: String!) {
+    sendPasswordResetEmail(input: { username: $username }) {
+      success
     }
-}
+  }
+`;
+
+const RESET_USER_PASSWORD_MUTATION = /* GraphQL */ `
+  mutation ResetUserPassword($key: String!, $login: String!, $password: String!) {
+    resetUserPassword(input: { key: $key, login: $login, password: $password }) {
+      user {
+        databaseId
+      }
+    }
+  }
+`;
 
 export const userLogin = async (username: string, password: string): Promise<AuthResponse> => {
+    let response: Response;
     try {
-        const response = await fetch(`${wordpressSiteUrl}/wp-json/custom/v1/login`, {
+        response = await fetch(`${wordpressSiteUrl}/wp-json/simple-jwt-login/v1/auth`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ username, password }),
+            body: JSON.stringify({ login: username, password }),
+            cache: "no-store",
         });
-        const data: AuthResponse = await response.json();
-        return data;
     } catch (error) {
-        console.error("Login error:", error);
-        return { success: false, message: "Login failed" };
+        return { success: false, message: "Could not connect to the server. Please try again." };
     }
+
+    const body = await response.json();
+    if (!response.ok || !body?.success || !body?.data?.jwt) {
+        return { success: false, message: body?.data?.errorMessage || "Invalid username or password." };
+    }
+
+    const payload = verifyWpJwt(body.data.jwt);
+    if (!payload) {
+        return { success: false, message: "Received an invalid token from the server." };
+    }
+
+    const session = await getSession();
+    session.isLoggedIn = true;
+    session.userId = Number(payload.id);
+    session.email = payload.email;
+    session.displayName = payload.username;
+    session.wpAuthToken = body.data.jwt;
+    await session.save();
+
+    return {
+        success: true,
+        message: "Login successful",
+        user_id: Number(payload.id),
+        user_email: payload.email,
+        user_display_name: payload.username,
+    };
 };
 
 export const userSignup = async (username: string, email: string, password: string): Promise<AuthResponse> => {
-
     if (!(await isEmailDomainReal(email))) {
         return { success: false, message: "Email domain appears to be invalid." };
     }
 
-    try {
-        const response = await fetch(`${wordpressSiteUrl}/wp-json/custom/v1/signup`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ username, email, password }),
-        });
-        const data: AuthResponse = await response.json();
-        return data;
-    } catch (error) {
-        console.error("Signup error:", error);
-        return { success: false, message: "Signup failed" };
+    const { data, errors } = await graphqlRequest<RegisterPayload>(REGISTER_MUTATION, { username, email, password });
+
+    if (errors || !data?.registerUser) {
+        return { success: false, message: errors?.[0]?.message || "Signup failed." };
     }
+
+    return { success: true, message: "Signup successful", user_id: data.registerUser.user.databaseId };
 };
 
 export const userLogout = async (): Promise<AuthResponse> => {
-    try {
-        const token = Cookies.get("jwt_token");
-        if (!token) {
-            return { success: true, message: "No token found, already logged out" };
-        }
-
-        const response = await fetch(`${wordpressSiteUrl}/wp-json/custom/v1/logout`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${token}`,
-            },
-        });
-
-        const data: AuthResponse = await response.json();
-
-        // Check the success field directly
-        if (data.success) {
-            return { success: true, message: "Logout successful" };
-        } else {
-            return { success: false, message: data.message || "Logout failed" };
-        }
-    } catch (error) {
-        console.error("Logout error:", error);
-        return { success: false, message: "Logout failed due to an error" };
-    }
+    const session = await getSession();
+    session.destroy();
+    return { success: true, message: "Logout successful" };
 };
 
-/**
- Action to request a password reset OTP.
- */
-export async function requestPasswordOtp(prevState: any, formData: FormData) {
-    const validatedFields = requestOtpSchema.safeParse({ email: formData.get('email') });
+export async function requestPasswordResetEmail(prevState: unknown, formData: FormData): Promise<PasswordResetResponse> {
+    const validatedFields = requestPasswordResetSchema.safeParse({ email: formData.get('email') });
     if (!validatedFields.success) {
         return { error: validatedFields.error.flatten().fieldErrors };
     }
-    return apiCall('/request-password-otp', validatedFields.data);
+
+    const { errors } = await graphqlRequest(SEND_PASSWORD_RESET_EMAIL_MUTATION, {
+        username: validatedFields.data.email,
+    });
+
+    if (errors) {
+        return { error: errors[0]?.message || "Failed to send reset email." };
+    }
+    return { success: "If an account exists for that email, a reset link has been sent." };
 }
 
-/**
-  Action to verify the OTP.
- */
-export async function verifyPasswordOtp(prevState: any, formData: FormData) {
-    const validatedFields = verifyOtpSchema.safeParse({
-        email: formData.get('email'),
-        otp: formData.get('otp'),
-    });
+export async function resetPasswordWithKey(
+    key: string,
+    login: string,
+    prevState: unknown,
+    formData: FormData
+): Promise<PasswordResetResponse> {
+    const validatedFields = confirmPasswordResetSchema.safeParse({ password: formData.get('password') });
     if (!validatedFields.success) {
         return { error: validatedFields.error.flatten().fieldErrors };
     }
-    return apiCall('/verify-password-otp', validatedFields.data);
-}
 
-/**
- Action to reset the password using the verified OTP.
- */
-export async function resetPasswordWithOtp(prevState: any, formData: FormData): Promise<PasswordResetResponse> {
-    const validatedFields = resetPasswordSchema.safeParse({
-        email: formData.get('email'),
-        otp: formData.get('otp'),
-        password: formData.get('password'),
+    const { errors } = await graphqlRequest(RESET_USER_PASSWORD_MUTATION, {
+        key,
+        login,
+        password: validatedFields.data.password,
     });
-    if (!validatedFields.success) {
-        return { error: validatedFields.error.flatten().fieldErrors };
-    }
-    const result = await apiCall('/reset-password-with-otp', validatedFields.data);
 
-    // Add a flag to signal completion to the UI
-    if (result.success) {
-        return { ...result, resetComplete: true };
+    if (errors) {
+        return { error: errors[0]?.message || "Password reset failed. The link may have expired." };
     }
-    return result;
+    return { success: "Your password has been reset.", resetComplete: true };
 }

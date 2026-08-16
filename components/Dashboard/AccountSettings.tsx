@@ -7,7 +7,7 @@ import { Customer } from '@/types/customer-type'
 import { useAuth } from '@/context/AuthContext'
 import { updateCustomerPersonalInfo } from '@/actions/customer-action'
 import { personalInfoSchema, type PersonalInfoFormValues } from '@/lib/validations/validation'
-import OtpPasswordReset from '../ForgotPassword/OtpPasswordReset'
+import PasswordResetRequest from '../ForgotPassword/PasswordResetRequest'
 import * as Icon from "@phosphor-icons/react/dist/ssr"
 
 
@@ -299,7 +299,7 @@ const AccountSettings = ({ customer, customerId, onCustomerUpdate }: AccountSett
                                 size={20}
                             />
                         </div>
-                        <OtpPasswordReset />
+                        <PasswordResetRequest />
                     </div>
                 </div>
             )}

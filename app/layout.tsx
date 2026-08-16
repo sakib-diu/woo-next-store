@@ -3,6 +3,8 @@
 import { getProductCategories, getCountries, getAttributesWithTerms, getProductTags, getCurrentCurrency, getStoreSettings, getBrands } from '@/actions/data-actions';
 import { AppDataProvider } from '@/context/AppDataContext';
 import { AuthProvider } from '@/context/AuthContext';
+import { getSession } from '@/lib/session';
+import type { User } from '@/actions/auth-actions';
 import { CartProvider } from '@/context/CartContext';
 import { CompareProvider } from '@/context/CompareContext';
 import { ModalCartProvider } from '@/context/ModalCartContext';
@@ -36,22 +38,36 @@ export default async function RootLayout({
   children: React.ReactNode
 }) {
   const [
-    countriesResult,
-    categoriesResult,
-    attributesResult,
-    tagsResult,
-    brandsResult,
-    currentCurrencyResult,
-    storeConfigResult
-  ] = await Promise.allSettled([
-    getCountries(),
-    getProductCategories(),
-    getAttributesWithTerms(),
-    getProductTags(),
-    getBrands(),
-    getCurrentCurrency(),
-    getStoreSettings()
+    [
+      countriesResult,
+      categoriesResult,
+      attributesResult,
+      tagsResult,
+      brandsResult,
+      currentCurrencyResult,
+      storeConfigResult,
+    ],
+    session,
+  ] = await Promise.all([
+    Promise.allSettled([
+      getCountries(),
+      getProductCategories(),
+      getAttributesWithTerms(),
+      getProductTags(),
+      getBrands(),
+      getCurrentCurrency(),
+      getStoreSettings(),
+    ]),
+    getSession(),
   ]);
+
+  const initialUser: User | null = session.isLoggedIn && session.userId
+    ? {
+      user_id: session.userId,
+      user_email: session.email || '',
+      user_display_name: session.displayName || '',
+    }
+    : null;
 
   const countries = countriesResult.status === 'fulfilled' ? countriesResult.value : [];
   const categories = categoriesResult.status === 'fulfilled' ? categoriesResult.value : [];
@@ -66,7 +82,7 @@ export default async function RootLayout({
     <html lang="en">
       <body className={instrument.className}>
         <NextTopLoader color="#9ad346" showSpinner={false} height={3} />
-        <AuthProvider>
+        <AuthProvider initialUser={initialUser}>
           <CartProvider>
             <AppDataProvider
               countries={countries}

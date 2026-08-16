@@ -5,13 +5,13 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import * as Icon from "@phosphor-icons/react/dist/ssr"
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import z from 'zod'
 
 
 const loginSchema = z.object({
-    username: z.string().min(1, "Username is required"),
+    username: z.string().min(1, "Username or email is required"),
     password: z.string().min(8, "Password must be at least 8 characters"),
     remember: z.boolean().optional(),
 });
@@ -37,12 +37,8 @@ const Login = () => {
         setIsLoading(true);
         setError(null);
         try {
-            // --- TODO: Replace this with your actual API call ---
-            console.log("Form Data:", data);
             const response = await login(data.username, data.password);
             if (response.success) {
-                console.log("Login successful, user id: ", response.user_id);
-                // Redirect to the homepage or dashboard after successful login
                 router.push('/dashboard');
             } else {
                 // Handle login failure
@@ -56,10 +52,14 @@ const Login = () => {
         }
     };
 
+    useEffect(() => {
+        if (isAuthenticated) {
+            router.push('/dashboard');
+        }
+    }, [isAuthenticated, router]);
+
     if (isAuthenticated) {
-        // If the user is already authenticated, redirect them to the dashboard
-        router.push('/dashboard');
-        return null; // Prevent rendering the login form
+        return null; // Prevent rendering the login form while redirecting
     }
 
     return (

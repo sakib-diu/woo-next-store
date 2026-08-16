@@ -29,7 +29,7 @@ Vertex Store is a modern, performance-optimized e-commerce store built with [Nex
 - 💳 **Stripe Payments**: Complete payment processing with Stripe integration
 - 🎨 **Modern UI**: Beautiful, responsive design with Tailwind CSS and custom SCSS
 - 📱 **Mobile-First**: Fully responsive design optimized for all devices
-- 🔐 **Authentication**: User registration, login, and account management, OTP-Based Password Reset.
+- 🔐 **Authentication**: User registration, login, and account management via WPGraphQL JWT, with email link-based password reset.
 - 🛍️ **Shopping Features**: Cart, wishlist, compare products, and checkout
 - 📊 **Dashboard**: Customer dashboard with order history and account management
 - 🔍 **Search & Filter**: Advanced product search and filtering capabilities
@@ -47,6 +47,9 @@ Ensure you have the following installed:
 - [Node.js](https://nodejs.org/) (version 18.0.0 or higher recommended)
 - [pnpm](https://pnpm.io/) (preferred package manager)
 - A running [WooCommerce](https://woocommerce.com/) instance with REST API enabled
+- The [WPGraphQL](https://wordpress.org/plugins/wp-graphql/) plugin, active on the WordPress site. Signup (`registerUser`) and password reset (`sendPasswordResetEmail` / `resetUserPassword`) are core WPGraphQL mutations — no extra plugin needed for those.
+- The [Simple JWT Login](https://wordpress.org/plugins/simple-jwt-login/) plugin, active, with its Authentication module enabled (Settings → Simple JWT Login → Authentication → "Allow Authentication"). This issues the JWT used for login — WPGraphQL itself has no `login` mutation, and the older "WPGraphQL JWT Authentication" plugin is no longer available on WordPress.org. Configure a `decryption_key` (HS256 secret) in its General settings and copy the same value into `WP_JWT_AUTH_SECRET` below, so the Next.js server can verify tokens it receives.
+- In WordPress Settings → General, "Anyone can register" enabled and "New User Default Role" set to Customer, so self-registered users are created as real WooCommerce customers.
 
 ### Steps
 
@@ -81,7 +84,13 @@ Ensure you have the following installed:
    WORDPRESS_SITE_URL=https://your-wordpress-site.com
    WC_CONSUMER_KEY=ck_your_consumer_key_here
    WC_CONSUMER_SECRET=cs_your_consumer_secret_here
-   
+
+   # Auth session (iron-session encryption key — generate your own, 32+ chars, keep secret)
+   SESSION_SECRET=replace_with_a_random_32_plus_character_string
+
+   # Must match the "decryption_key" set in the Simple JWT Login plugin's WP admin settings
+   WP_JWT_AUTH_SECRET=replace_with_the_same_secret_configured_in_wp_admin
+
    # Stripe Configuration
    STRIPE_SECRET_KEY=sk_test_your_stripe_secret_key_here
    STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_here
@@ -91,6 +100,8 @@ Ensure you have the following installed:
    WOOCOMMERCE_KEY=ck_your_consumer_key_here
    WOOCOMMERCE_SECRET=cs_your_consumer_secret_here
    ```
+
+   Signup and password reset talk to `${WORDPRESS_SITE_URL}/graphql` (requires WPGraphQL active). Login talks to `${WORDPRESS_SITE_URL}/wp-json/simple-jwt-login/v1/auth` (requires Simple JWT Login active, with Authentication enabled and its `decryption_key` matching `WP_JWT_AUTH_SECRET`) — see Prerequisites above.
 
 4. **Start the development server**:
 
@@ -121,9 +132,14 @@ Ensure you have the following installed:
 The project uses environment variables for configuration. Here are the required variables:
 
 #### WordPress/WooCommerce API
-- `WORDPRESS_SITE_URL`: Your WordPress site URL (e.g., `https://yourstore.com`)
+- `WORDPRESS_SITE_URL`: Your WordPress site URL (e.g., `https://yourstore.com`). Also used as the base for the GraphQL endpoint (`${WORDPRESS_SITE_URL}/graphql`) used by authentication.
 - `WC_CONSUMER_KEY`: Your WooCommerce API consumer key
 - `WC_CONSUMER_SECRET`: Your WooCommerce API consumer secret
+
+#### Authentication
+
+- `SESSION_SECRET`: Random 32+ character string used by `iron-session` to encrypt the httpOnly session cookie. Generate your own per environment; never reuse across environments or commit it.
+- `WP_JWT_AUTH_SECRET`: HS256 secret used to verify the JWT issued by the Simple JWT Login WordPress plugin. Must exactly match that plugin's `decryption_key` setting in wp-admin.
 
 #### Stripe Payment Processing
 - `STRIPE_SECRET_KEY`: Your Stripe secret key
