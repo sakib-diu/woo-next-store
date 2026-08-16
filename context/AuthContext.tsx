@@ -14,7 +14,7 @@ interface AuthContextType {
     user: User | null;
     isAuthenticated: boolean;
     loading: boolean;
-    login: (username: string, password: string) => Promise<AuthResponse>;
+    login: (username: string, password: string, remember?: boolean) => Promise<AuthResponse>;
     signup: (username: string, email: string, password: string) => Promise<AuthResponse>;
     logout: () => Promise<AuthResponse>;
     requestPasswordReset: (email: string) => Promise<PasswordResetResponse>;
@@ -33,8 +33,8 @@ export const AuthProvider = ({
     const [isAuthenticated, setIsAuthenticated] = useState(!!initialUser);
     const [loading] = useState(false);
 
-    const login = async (username: string, password: string): Promise<AuthResponse> => {
-        const data = await userLogin(username, password);
+    const login = async (username: string, password: string, remember: boolean = false): Promise<AuthResponse> => {
+        const data = await userLogin(username, password, remember);
         if (data.success && data.user_id) {
             const userData: User = {
                 user_id: data.user_id,

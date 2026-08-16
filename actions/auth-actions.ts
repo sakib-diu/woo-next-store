@@ -1,7 +1,7 @@
 "use server"
 
 import { graphqlRequest } from "@/lib/graphql-client";
-import { getSession } from "@/lib/session";
+import { applyRememberMe, getSession } from "@/lib/session";
 import { verifyWpJwt } from "@/lib/jwt";
 import { requestPasswordResetSchema, confirmPasswordResetSchema } from "../lib/validations/resetPasswordValidation";
 import dns from 'dns/promises';
@@ -78,7 +78,7 @@ const RESET_USER_PASSWORD_MUTATION = /* GraphQL */ `
   }
 `;
 
-export const userLogin = async (username: string, password: string): Promise<AuthResponse> => {
+export const userLogin = async (username: string, password: string, remember: boolean = false): Promise<AuthResponse> => {
     let response: Response;
     try {
         response = await fetch(`${wordpressSiteUrl}/wp-json/simple-jwt-login/v1/auth`, {
@@ -107,6 +107,7 @@ export const userLogin = async (username: string, password: string): Promise<Aut
     session.email = payload.email;
     session.displayName = payload.username;
     session.wpAuthToken = body.data.jwt;
+    applyRememberMe(session, remember);
     await session.save();
 
     return {

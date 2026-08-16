@@ -37,7 +37,7 @@ const Login = () => {
         setIsLoading(true);
         setError(null);
         try {
-            const response = await login(data.username, data.password);
+            const response = await login(data.username, data.password, data.remember);
             if (response.success) {
                 router.push('/dashboard');
             } else {
