@@ -465,7 +465,7 @@ const Default: React.FC<Props> = ({ data, productId, variations, relatedProducts
                                         <div className="list-size flex items-center gap-2 flex-wrap mt-3">
                                             {data.attributes?.find(item => item.name.toLowerCase() === "size")?.options.map((item, index) => (
                                                 <div
-                                                    className={`size-item ${item === 'freesize' ? 'px-3 py-2' : 'w-12 h-12'} flex items-center justify-center text-button rounded-full bg-white border border-line ${activeSize === item ? 'active' : ''}`}
+                                                    className={`size-item ${item.trim().length > 4 ? 'w-fit h-12 px-4 whitespace-nowrap' : 'w-12 h-12'} flex items-center justify-center text-button rounded-full bg-white border border-line ${activeSize === item ? 'active' : ''}`}
                                                     key={index}
                                                     onClick={() => handleActiveSize(item)}
                                                 >
@@ -1096,7 +1096,7 @@ const Default: React.FC<Props> = ({ data, productId, variations, relatedProducts
                         </div>
 
                     </div>
-                    {data.related_ids.length > 0 && (relatedProducts?.length ?? 0) > 0 &&
+                    {(relatedProducts?.length ?? 0) > 0 &&
                         <div className="related-product md:py-20 py-10">
                             <div className="container">
                                 <div className="heading3 text-center">Related Products</div>

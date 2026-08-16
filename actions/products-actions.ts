@@ -159,6 +159,8 @@ export const getProducts = async (query: ProductQueryParams = {}): Promise<{
 /**
  * Fetches a bounded set of products by ID (e.g. related/upsell products). Unlike `getProducts`,
  * this is not meant for catalog browsing — callers should pass a small, already-known ID list.
+ * Results are reordered to match the input `ids` order, since WooCommerce's `include` filter
+ * does not preserve it (it falls back to default date ordering).
  */
 export const getProductsByIds = async (ids: number[]): Promise<{
   products: Product[];
@@ -169,7 +171,42 @@ export const getProductsByIds = async (ids: number[]): Promise<{
   }
 
   const result = await getProducts({ include: ids, perPage: Math.min(ids.length, 100) });
-  return { products: result.products, status: result.status };
+  const orderById = new Map(ids.map((id, index) => [id, index]));
+  const products = [...result.products].sort(
+    (a, b) => (orderById.get(a.id) ?? 0) - (orderById.get(b.id) ?? 0)
+  );
+  return { products, status: result.status };
+};
+
+/**
+ * Related products for a product detail page. Prefers WooCommerce's computed `related_ids`
+ * (based on shared categories/tags); when a product has none — e.g. it's the only item in its
+ * categories — falls back to other products sharing its categories.
+ */
+export const getRelatedProducts = async ({
+  productId,
+  relatedIds,
+  categoryIds,
+  limit = 4,
+}: {
+  productId: number;
+  relatedIds: number[];
+  categoryIds?: number[];
+  limit?: number;
+}): Promise<{ products: Product[]; status: 'OK' | 'ERROR' }> => {
+  if (relatedIds.length > 0) {
+    return getProductsByIds(relatedIds.slice(0, limit));
+  }
+
+  if (!categoryIds?.length) {
+    return { products: [], status: 'OK' };
+  }
+
+  const result = await getProducts({ categoryIds, perPage: limit + 1 });
+  return {
+    products: result.products.filter((product) => product.id !== productId).slice(0, limit),
+    status: result.status,
+  };
 };
 
 export async function getProductReviews(productId: number) {

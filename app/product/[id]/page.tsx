@@ -1,6 +1,6 @@
 
 
-import { getProductById, getProductReviews, getProductsByIds, getProductVariationsById } from '@/actions/products-actions';
+import { getProductById, getProductReviews, getRelatedProducts, getProductVariationsById } from '@/actions/products-actions';
 import BreadcrumbProduct from '@/components/Breadcrumb/BreadcrumbProduct';
 import Footer from '@/components/Footer/Footer';
 import MenuOne from '@/components/Header/Menu/MenuOne';
@@ -50,19 +50,21 @@ interface ProductDefaultProps {
 const ProductDefault = async ({ params }: ProductDefaultProps) => {
     const { id: productId } = await params || "1";
 
-    const [{ product, status }, { variations }, { reviews }, categories] = await Promise.all([
-        getProductByIdCached({ id: productId }),
-        getProductVariationsById({ id: productId }),
-        getProductReviews(Number(productId)),
-        getProductCategories(),
-    ])
+    const { product, status } = await getProductByIdCached({ id: productId });
 
     if (status === "ERROR" || !product) {
         notFound()
     }
 
     const relatedIds = product.related_ids?.map((item) => Number(item)) ?? []
-    const { products: relatedProducts } = await getProductsByIds(relatedIds);
+    const categoryIds = product.categories?.map((category) => category.id) ?? []
+
+    const [{ variations }, { reviews }, categories, { products: relatedProducts }] = await Promise.all([
+        getProductVariationsById({ id: productId }),
+        getProductReviews(Number(productId)),
+        getProductCategories(),
+        getRelatedProducts({ productId: product.id, relatedIds, categoryIds }),
+    ])
 
     return (
         <>
