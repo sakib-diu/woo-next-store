@@ -147,6 +147,7 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
     const watchedState = watch("state");
     const watchedCity = watch("city");
     const watchedZipcode = watch("zipcode");
+    const selectedPaymentMethod = watch("paymentMethod");
 
     useEffect(() => {
         setSelectedCountry(watchedCountry || '');
@@ -539,7 +540,7 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
                                                         <select className={`border px-4 py-3 w-full rounded-lg ${errors.state ? 'border-red' : 'border-line'}`} disabled={!selectedCountry} {...register("state")}>
                                                             <option value="">State</option>
                                                             {getSelectedCountryStates().map((state) => (
-                                                                <option key={state.code} value={state.code}>{state.name}</option>
+                                                                <option key={state.code} value={state.code}>{state.name} ({state.code})</option>
                                                             ))}
                                                         </select>
                                                         <Icon.CaretDown className="arrow-down align-middle" />
@@ -558,7 +559,14 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
                                                         shippingRateOptions.length > 0 ? (
                                                             <div className="space-y-3">
                                                                 {shippingRateOptions.map((rate) => (
-                                                                    <div key={rate.rate_id} className="flex items-center justify-between p-4 border border-line rounded-lg">
+                                                                    <label
+                                                                        key={rate.rate_id}
+                                                                        htmlFor={`shipping_${rate.rate_id}`}
+                                                                        className={cn(
+                                                                            "flex items-center justify-between gap-3 p-4 border rounded-xl cursor-pointer transition-all duration-200",
+                                                                            rate.selected ? "border-black bg-black/[0.03] shadow-sm" : "border-line hover:border-black/30"
+                                                                        )}
+                                                                    >
                                                                         <div className="flex items-center gap-3">
                                                                             <input
                                                                                 type="radio"
@@ -567,12 +575,13 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
                                                                                 value={rate.rate_id}
                                                                                 checked={rate.selected}
                                                                                 onChange={() => selectShippingRate(rate.package_id, rate.rate_id)}
+                                                                                className="sr-only"
                                                                             />
-                                                                            <label htmlFor={`shipping_${rate.rate_id}`} className="cursor-pointer">
+                                                                            <span className={cn(rate.selected ? "text-black font-medium" : "text-title")}>
                                                                                 {rate.name}
-                                                                            </label>
+                                                                            </span>
                                                                         </div>
-                                                                        <span className="text-title">
+                                                                        <span className={cn("text-title", rate.selected ? "font-semibold" : "")}>
                                                                             {fromMinorUnit(rate.price, rate.currency_minor_unit) === 0 ? (
                                                                                 'Free'
                                                                             ) : (
@@ -582,7 +591,7 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
                                                                                 </>
                                                                             )}
                                                                         </span>
-                                                                    </div>
+                                                                    </label>
                                                                 ))}
                                                             </div>
                                                         ) : (
@@ -600,35 +609,39 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
                                                     <h4 className="heading4">Payment</h4>
                                                     <p className="body1 text-secondary2 mt-3">All transactions are secure and encrypted.</p>
                                                     <div className="list-payment mt-5">
-                                                        <div className="payment-methods">
+                                                        <div className="payment-methods space-y-3">
                                                             {paymentGateways.length === 0 ? (
                                                                 <div className="body1 text-secondary2 py-4 px-5 border border-line rounded-lg bg-surface">
                                                                     No payment methods are currently available. Please contact support.
                                                                 </div>
                                                             ) : (
-                                                                paymentGateways.map((gateway, idx) => (
-                                                                    <div
-                                                                        key={gateway.id}
-                                                                        className={cn(
-                                                                            "item flex items-center gap-2 relative px-5 border border-line",
-                                                                            idx === 0 ? "rounded-t-lg" : "",
-                                                                            idx === paymentGateways.length - 1 ? "rounded-b-lg" : ""
-                                                                        )}
-                                                                    >
-                                                                        <input
-                                                                            type="radio"
-                                                                            value={gateway.id}
-                                                                            className="cursor-pointer"
-                                                                            {...register("paymentMethod")}
-                                                                        />
-                                                                        <label className="w-full py-4 cursor-pointer">{decodeHtmlEntities(gateway.title) || gateway.title}</label>
-                                                                        {gateway.id === 'cod' ? (
-                                                                            <Icon.TruckIcon className="text-xl absolute top-1/2 right-5 -translate-y-1/2" />
-                                                                        ) : (
-                                                                            <Icon.CreditCardIcon className="text-xl absolute top-1/2 right-5 -translate-y-1/2" />
-                                                                        )}
-                                                                    </div>
-                                                                ))
+                                                                paymentGateways.map((gateway) => {
+                                                                    const isSelected = selectedPaymentMethod === gateway.id;
+                                                                    return (
+                                                                        <label
+                                                                            key={gateway.id}
+                                                                            className={cn(
+                                                                                "flex items-center gap-3 px-5 py-4 border rounded-xl cursor-pointer transition-all duration-200",
+                                                                                isSelected ? "border-black bg-black/[0.03] shadow-sm" : "border-line hover:border-black/30"
+                                                                            )}
+                                                                        >
+                                                                            <input
+                                                                                type="radio"
+                                                                                value={gateway.id}
+                                                                                className="sr-only"
+                                                                                {...register("paymentMethod")}
+                                                                            />
+                                                                            <span className={cn("flex-1", isSelected ? "text-black font-medium" : "")}>
+                                                                                {decodeHtmlEntities(gateway.title) || gateway.title}
+                                                                            </span>
+                                                                            {gateway.id === 'cod' ? (
+                                                                                <Icon.TruckIcon className="text-xl shrink-0 text-secondary2" />
+                                                                            ) : (
+                                                                                <Icon.CreditCardIcon className="text-xl shrink-0 text-secondary2" />
+                                                                            )}
+                                                                        </label>
+                                                                    );
+                                                                })
                                                             )}
                                                         </div>
                                                     </div>
@@ -636,13 +649,12 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
 
                                                 <div className="block-button md:mt-10 mt-6">
                                                     <button type="submit"
-                                                        className={cn("button-main w-full bg-black",
-                                                            isSubmitting ? 'cursor-not-allowed opacity-50' : '',
-                                                            watch("paymentMethod") === 'cod' ? 'bg-primary havor:bg-primary/90' : 'bg-primary hover:bg-primary/90'
+                                                        className={cn("button-main w-full bg-primary hover:bg-primary/90",
+                                                            isSubmitting ? 'cursor-not-allowed opacity-50' : ''
                                                         )}
                                                         disabled={isSubmitting || paymentGateways.length === 0}
                                                     >
-                                                        {isSubmitting ? 'Processing...' : watch("paymentMethod") === 'cod' ? 'Place Order' : 'Pay Now'}
+                                                        {isSubmitting ? 'Processing...' : selectedPaymentMethod === 'cod' ? 'Place Order' : 'Pay Now'}
                                                     </button>
                                                     {submitError && <p className="text-red text-center text-sm mt-2">{submitError}</p>}
                                                 </div>
