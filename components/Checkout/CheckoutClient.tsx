@@ -1,5 +1,6 @@
 'use client'
-import { isValidPhoneNumber } from "libphonenumber-js";
+import { isValidPhoneNumber, type CountryCode } from "libphonenumber-js";
+import { isValidPostcodeForCountry } from '@/lib/validations/postcode';
 import { useAppData } from '@/context/AppDataContext';
 import { useCart } from '@/context/CartContext';
 import { useModalCartContext } from '@/context/ModalCartContext';
@@ -29,11 +30,16 @@ import StripeCheckout from './StripeCheckoutForm';
 // there's no REST-exposed WooCommerce locale rule to check against, so this is the best
 // data-grounded approximation (and it also fixes the prior bug where a country with zero
 // defined states could never pass validation at all).
+//
+// Phone and postcode format are both validated against the selected `country` (in superRefine,
+// since they're cross-field), mirroring the same rules WooCommerce's Store API enforces
+// server-side — catching a mismatched format here instead of a round trip to /checkout that
+// comes back as a generic "Invalid parameter(s)" error.
 function buildCheckoutSchema(countriesData: CountryDataType[]) {
     return z.object({
         email: z.string().email({ message: "A valid email is required." }),
         emailOffers: z.boolean().optional(),
-        phone: z.string().refine(isValidPhoneNumber, { message: "A valid phone number is required." }),
+        phone: z.string().min(1, { message: "Phone number is required." }),
         country: z.string().min(1, { message: "Country is required." }),
         firstName: z.string().min(1, { message: "Last name is required." }),
         lastName: z.string().min(1, { message: "Last name is required." }),
@@ -50,6 +56,14 @@ function buildCheckoutSchema(countriesData: CountryDataType[]) {
         const requiresState = !!country && Object.keys(country.states || {}).length > 0;
         if (requiresState && !data.state) {
             ctx.addIssue({ code: z.ZodIssueCode.custom, message: "State is required.", path: ["state"] });
+        }
+
+        if (data.country && data.phone && !isValidPhoneNumber(data.phone, data.country as CountryCode)) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Enter a valid phone number for the selected country.", path: ["phone"] });
+        }
+
+        if (data.country && data.zipcode && !isValidPostcodeForCountry(data.zipcode, data.country)) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Enter a valid ZIP/postal code for the selected country.", path: ["zipcode"] });
         }
     });
 }
@@ -467,7 +481,7 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
                                             )}
                                         </div>
                                         <div>
-                                            <input type="email" className={`border-line mt-5 px-4 py-3 w-full rounded-lg ${errors.email ? 'border-red' : ''}`} placeholder="Email" {...register("email")} />
+                                            <input type="email" className={`border-line mt-5 px-4 py-3 w-full rounded-lg ${errors.email ? 'border-red' : ''}`} placeholder="you@example.com" {...register("email")} />
                                             {errors.email && <p className="text-red text-sm mt-1">{errors.email.message}</p>}
 
                                             <div className="flex items-center mt-5">
@@ -478,7 +492,7 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
                                                 <label htmlFor="emailOffers" className="pl-2 cursor-pointer">Email me with news and offers</label>
                                             </div>
 
-                                            <input type="tel" className={`border-line mt-5 px-4 py-3 w-full rounded-lg ${errors.phone ? 'border-red' : ''}`} placeholder="+880 169 025 XXXX" {...register("phone")} />
+                                            <input type="tel" className={`border-line mt-5 px-4 py-3 w-full rounded-lg ${errors.phone ? 'border-red' : ''}`} placeholder="+1 (201) 555-0123" {...register("phone")} />
                                             {errors.phone && <p className="text-red text-sm mt-1">{errors.phone.message}</p>}
                                         </div>
 
@@ -498,26 +512,26 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
                                                     </div>
 
                                                     <div className="">
-                                                        <input className={`border-line px-4 py-3 w-full rounded-lg ${errors.lastName ? 'border-red' : ''}`} placeholder="First Name" {...register("firstName")} />
+                                                        <input className={`border-line px-4 py-3 w-full rounded-lg ${errors.lastName ? 'border-red' : ''}`} placeholder="John" {...register("firstName")} />
                                                         {errors.firstName && <p className="text-red text-sm mt-1">{errors.firstName.message}</p>}
                                                     </div>
 
                                                     <div className="">
-                                                        <input className={`border-line px-4 py-3 w-full rounded-lg ${errors.lastName ? 'border-red' : ''}`} placeholder="Last Name" {...register("lastName")} />
+                                                        <input className={`border-line px-4 py-3 w-full rounded-lg ${errors.lastName ? 'border-red' : ''}`} placeholder="Doe" {...register("lastName")} />
                                                         {errors.lastName && <p className="text-red text-sm mt-1">{errors.lastName.message}</p>}
                                                     </div>
 
                                                     <div className="col-span-full">
-                                                        <input className={`border-line px-4 py-3 w-full rounded-lg ${errors.address ? 'border-red' : ''}`} placeholder="Address" {...register("address")} />
+                                                        <input className={`border-line px-4 py-3 w-full rounded-lg ${errors.address ? 'border-red' : ''}`} placeholder="123 Main St" {...register("address")} />
                                                         {errors.address && <p className="text-red text-sm mt-1">{errors.address.message}</p>}
                                                     </div>
 
                                                     <div className="">
-                                                        <input className="border-line px-4 py-3 w-full rounded-lg" placeholder="Apartment, suite, etc. (optional)" {...register("apartment")} />
+                                                        <input className="border-line px-4 py-3 w-full rounded-lg" placeholder="Apt 4B (optional)" {...register("apartment")} />
                                                     </div>
 
                                                     <div className="">
-                                                        <input className={`border-line px-4 py-3 w-full rounded-lg ${errors.city ? 'border-red' : ''}`} placeholder="City" {...register("city")} />
+                                                        <input className={`border-line px-4 py-3 w-full rounded-lg ${errors.city ? 'border-red' : ''}`} placeholder="New York" {...register("city")} />
                                                         {errors.city && <p className="text-red text-sm mt-1">{errors.city.message}</p>}
                                                     </div>
 
@@ -533,7 +547,7 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
                                                     </div>
 
                                                     <div className="">
-                                                        <input className={`border-line px-4 py-3 w-full rounded-lg ${errors.zipcode ? 'border-red' : ''}`} placeholder="Zip Code" {...register("zipcode")} />
+                                                        <input className={`border-line px-4 py-3 w-full rounded-lg ${errors.zipcode ? 'border-red' : ''}`} placeholder="10001" {...register("zipcode")} />
                                                         {errors.zipcode && <p className="text-red text-sm mt-1">{errors.zipcode.message}</p>}
                                                     </div>
                                                 </div>
