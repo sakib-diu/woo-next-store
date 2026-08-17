@@ -231,6 +231,20 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
         [cart.shipping_rates]
     );
 
+    // WooCommerce doesn't auto-pick a rate when a package has none selected yet — default to
+    // the cheapest option per package instead of leaving the customer with nothing chosen.
+    useEffect(() => {
+        if (isMutating) return;
+        for (const pkg of cart.shipping_rates) {
+            if (pkg.shipping_rates.length === 0 || pkg.shipping_rates.some((rate) => rate.selected)) continue;
+            const cheapest = pkg.shipping_rates.reduce((min, rate) =>
+                Number(rate.price) < Number(min.price) ? rate : min
+            );
+            selectShippingRate(pkg.package_id, cheapest.rate_id);
+            break;
+        }
+    }, [cart.shipping_rates, isMutating, selectShippingRate]);
+
     const getSelectedCountryStates = () => {
         const country = countriesData.find(c => c.code === selectedCountry)
         const states = country?.states || {} as StateDataType[]

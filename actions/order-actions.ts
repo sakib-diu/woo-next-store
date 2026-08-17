@@ -58,10 +58,12 @@ export async function createOrder({
 
         revalidatePath('/')
         return { order: response.data, success: true };
-    } catch {
-        // const errorMessage = error || "Failed to create order";
-        const res = { error: "failed", success: false }
-        return res;
+    } catch (error) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const err = error as any;
+        console.error("Error creating order:", err.response?.data || err);
+        const message = err.response?.data?.message || (error instanceof Error ? error.message : "Failed to create order");
+        return { error: message, success: false };
     }
 }
 
