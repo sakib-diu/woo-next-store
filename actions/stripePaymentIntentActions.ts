@@ -25,18 +25,23 @@ export async function createPaymentIntent(orderId: number) {
         const amountInCents = Math.round(parseFloat(order.total) * 100);
 
         // 2. Create a PaymentIntent on the server
-        const paymentIntent = await stripe.paymentIntents.create({
-            payment_method_types: ['card'],
-            amount: amountInCents,
-            currency: order.currency.toLowerCase(),
-            // automatic_payment_methods: {
-            //     enabled: true,
-            // },
-            // Link the Stripe payment to your WooCommerce order
-            metadata: {
-                woocommerce_order_id: order.id,
+        const paymentIntent = await stripe.paymentIntents.create(
+            {
+                payment_method_types: ['card'],
+                amount: amountInCents,
+                currency: order.currency.toLowerCase(),
+                // automatic_payment_methods: {
+                //     enabled: true,
+                // },
+                // Link the Stripe payment to your WooCommerce order
+                metadata: {
+                    woocommerce_order_id: order.id.toString(),
+                },
             },
-        });
+            // Retrying create-intent for the same order (e.g. a flaky network response) reuses
+            // the same PaymentIntent instead of spawning a duplicate.
+            { idempotencyKey: `pi_create_${order.id}` }
+        );
 
         // 3. Return only the client_secret to the frontend
         return { clientSecret: paymentIntent.client_secret, orderId: order.id };

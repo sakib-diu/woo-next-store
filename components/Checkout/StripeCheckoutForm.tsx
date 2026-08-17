@@ -1,6 +1,6 @@
 'use client';
 
-import { updateOrderStatus } from '@/actions/order-actions';
+import { checkOrderExists } from '@/actions/order-actions';
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import { PaymentIntent, StripeElementsOptions } from '@stripe/stripe-js';
 import { useCallback, useEffect, useState } from 'react';
@@ -34,48 +34,45 @@ const PaymentForm = ({
 }) => {
     const [message, setMessage] = useState<string | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
-    const [isUpdatingOrder, setIsUpdatingOrder] = useState(false);
+    const [isConfirmingOrder, setIsConfirmingOrder] = useState(false);
     const { clearCart } = useCart()
     const stripe = useStripe();
     const elements = useElements();
     const router = useRouter();
 
-    const updateOrderAndRedirect = useCallback(async (paymentIntent: PaymentIntentWithMetadata) => {
-        setIsUpdatingOrder(true);
+    // The order is only ever marked paid by the Stripe webhook (server-verified against the
+    // real charge amount) — this just waits briefly for that to land so the thank-you page
+    // doesn't flash "Pending Payment", then redirects regardless once the wait is up.
+    const ORDER_POLL_INTERVAL_MS = 1500;
+    const ORDER_POLL_MAX_ATTEMPTS = 6;
+
+    const finalizeSuccess = useCallback(async (paymentIntent: PaymentIntentWithMetadata) => {
+        setIsConfirmingOrder(true);
+        setMessage('Payment successful! Confirming your order...');
         try {
-            // Use orderId prop (more reliable) with metadata as fallback
-            let finalOrderId = orderId;
-            if (!finalOrderId) {
-                const orderIdFromMetadata = paymentIntent.metadata?.woocommerce_order_id;
-                if (orderIdFromMetadata) {
-                    finalOrderId = parseInt(orderIdFromMetadata);
-                }
-            }
+            const orderIdFromMetadata = paymentIntent.metadata?.woocommerce_order_id;
+            const finalOrderId = orderId || (orderIdFromMetadata ? parseInt(orderIdFromMetadata) : undefined);
 
             if (!finalOrderId) {
                 throw new Error('Order ID not available from props or payment intent metadata');
             }
 
-            // console.log('Updating order status for orderId:', finalOrderId, 'with paymentIntent:', paymentIntent.id);
-
-            const result = await updateOrderStatus(finalOrderId, 'processing', paymentIntent.id, true, new Date().toString());
-            if (result.success) {
-                // Redirect to thank you page with orderId
-
-                // clearCart(); // Clear cart after successful payment
-                setMessage('Payment successful! Redirecting to thank you page...');
-                router.push(`/checkout/thank-you?orderId=${finalOrderId}`);
-            } else {
-                console.log(result.error)
-                setMessage('Payment successful, but failed to update order. Please contact support.');
+            for (let attempt = 0; attempt < ORDER_POLL_MAX_ATTEMPTS; attempt++) {
+                const order = await checkOrderExists(finalOrderId);
+                if (order?.is_paid) break;
+                await new Promise((resolve) => setTimeout(resolve, ORDER_POLL_INTERVAL_MS));
             }
+
+            clearCart();
+            setMessage('Redirecting to thank you page...');
+            router.push(`/checkout/thank-you?orderId=${finalOrderId}`);
         } catch (error) {
-            console.error('Error updating order:', error);
-            setMessage('Payment successful, but failed to update order. Please contact support.');
+            console.error('Error confirming order:', error);
+            setMessage('Payment successful, but we could not confirm your order. Please contact support.');
         } finally {
-            setIsUpdatingOrder(false);
+            setIsConfirmingOrder(false);
         }
-    }, [orderId, router]);
+    }, [orderId, router, clearCart]);
 
     useEffect(() => {
         if (!stripe) {
@@ -97,8 +94,7 @@ const PaymentForm = ({
 
             switch (paymentIntent.status) {
                 case 'succeeded':
-                    setMessage('Payment succeeded! Updating order...');
-                    await updateOrderAndRedirect(extendedPaymentIntent);
+                    await finalizeSuccess(extendedPaymentIntent);
                     if (finalOrderId) {
                         onSuccess?.(paymentIntent, finalOrderId.toString());
                     }
@@ -115,7 +111,7 @@ const PaymentForm = ({
                     break;
             }
         });
-    }, [stripe, onSuccess, onError, updateOrderAndRedirect, clientSecret, orderId]);
+    }, [stripe, onSuccess, onError, finalizeSuccess, clientSecret, orderId]);
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -144,9 +140,8 @@ const PaymentForm = ({
             }
             onError?.(error.message || 'Payment failed');
         } else if (paymentIntent) {
-            setMessage('Payment succeeded! Updating order...');
             const extendedPaymentIntent = paymentIntent as PaymentIntentWithMetadata;
-            await updateOrderAndRedirect(extendedPaymentIntent);
+            await finalizeSuccess(extendedPaymentIntent);
             // Use orderId prop primarily, with metadata as fallback
             const orderIdFromMetadata = extendedPaymentIntent.metadata?.woocommerce_order_id;
             const finalOrderId = orderId || orderIdFromMetadata;
@@ -170,16 +165,16 @@ const PaymentForm = ({
 
             <button
                 type="submit"
-                disabled={!stripe || isProcessing || isUpdatingOrder}
-                className={`w-full py-3 px-4 rounded-lg font-semibold transition-all duration-200 ${!stripe || isProcessing || isUpdatingOrder
+                disabled={!stripe || isProcessing || isConfirmingOrder}
+                className={`w-full py-3 px-4 rounded-lg font-semibold transition-all duration-200 ${!stripe || isProcessing || isConfirmingOrder
                     ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                     : 'bg-black text-white hover:bg-gray-800 active:scale-[0.98]'
                     }`}
             >
-                {isProcessing || isUpdatingOrder ? (
+                {isProcessing || isConfirmingOrder ? (
                     <div className="flex items-center justify-center gap-2">
                         <Icon.CircleNotchIcon className="animate-spin" size={16} />
-                        {isProcessing ? 'Processing Payment...' : 'Updating Order...'}
+                        {isProcessing ? 'Processing Payment...' : 'Confirming Order...'}
                     </div>
                 ) : (
                     'Complete Payment'

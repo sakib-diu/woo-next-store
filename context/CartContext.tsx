@@ -7,9 +7,11 @@ import {
     fetchCart,
     removeCartCoupon,
     removeCartItem,
+    selectCartShippingRate,
     updateCartItemQuantity,
+    updateCustomerAddress as updateCustomerAddressAction,
 } from '@/actions/cart-actions';
-import type { StoreApiResult } from '@/lib/store-api-client';
+import type { StoreApiAddress, StoreApiResult } from '@/lib/store-api-client';
 import { StoreApiCart } from '@/types/store-api-type';
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
@@ -82,6 +84,8 @@ interface CartContextProps {
     removeCoupon: (code: string) => Promise<MutationResult>;
     clearCart: () => Promise<void>;
     refreshCart: () => Promise<void>;
+    updateCustomerAddress: (billing: StoreApiAddress, shipping?: StoreApiAddress) => Promise<MutationResult>;
+    selectShippingRate: (packageId: number | string, rateId: string) => Promise<MutationResult>;
 }
 
 const CartContext = createContext<CartContextProps | undefined>(undefined);
@@ -213,6 +217,17 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await runMutation(() => clearCartAction());
     }, [runMutation]);
 
+    const updateCustomerAddress = useCallback(
+        (billing: StoreApiAddress, shipping?: StoreApiAddress) =>
+            runMutation(() => updateCustomerAddressAction(billing, shipping)),
+        [runMutation]
+    );
+
+    const selectShippingRate = useCallback(
+        (packageId: number | string, rateId: string) => runMutation(() => selectCartShippingRate(packageId, rateId)),
+        [runMutation]
+    );
+
     const refreshCart = useCallback(async () => {
         const result = await fetchCart();
         if (result.ok) setCart(result.cart);
@@ -234,6 +249,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 removeCoupon,
                 clearCart,
                 refreshCart,
+                updateCustomerAddress,
+                selectShippingRate,
             }}
         >
             {children}

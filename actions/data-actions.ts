@@ -1,6 +1,6 @@
 "use server"
 
-import { AttributesWithTermsType, AttributeTermType, CategorieType, CountryDataType, CurrencyType, ProductAttributeType, ProductBrandType, ShippingLocationDataType, ShippingMethodDataType, ShippingZoneDataType, StoreConfig, TagType, TaxDataType, } from "@/types/data-type";
+import { AttributesWithTermsType, AttributeTermType, CategorieType, CountryDataType, CurrencyType, ProductAttributeType, ProductBrandType, StoreConfig, TagType } from "@/types/data-type";
 import WooCommerceRestApi from "@woocommerce/woocommerce-rest-api";
 import { unstable_cache } from "next/cache";
 
@@ -49,121 +49,37 @@ export const getCountries = async (): Promise<CountryDataType[]> => {
   }
 }
 
-export const getTaxes = async (): Promise<TaxDataType[]> => {
-  try {
-    const getCached = unstable_cache(
-      async () => (await WooCommerce.get("taxes")).data as TaxDataType[],
-      ["taxes"],
-      { revalidate: REFERENCE_REVALIDATE_SECONDS, tags: ["taxes"] }
-    );
-    return await getCached();
-  } catch (error) {
-    console.error("Error fetching countries:", error);
-    return [];
-  }
+export interface PaymentGatewayDataType {
+  id: string;
+  title: string;
+  description: string;
+  order: number;
+  enabled: boolean;
 }
 
-export async function getShippingZones(): Promise<ShippingZoneDataType[]> {
+// The frontend only ships JS for these gateways today — even if other gateways are enabled in
+// wp-admin, there's no checkout UI for them yet, so they're filtered out rather than shown.
+const SUPPORTED_GATEWAY_IDS = new Set(['cod', 'stripe']);
+
+export const getPaymentGateways = async (): Promise<PaymentGatewayDataType[]> => {
   try {
     const getCached = unstable_cache(
       async () => {
-        const zonesResponse = await WooCommerce.get('shipping/zones');
-        const zones: ShippingZoneDataType[] = zonesResponse.data.filter((zone: ShippingZoneDataType) => zone.id !== 0); // Exclude "Locations not covered"
-
-        const zonesWithMethods = await Promise.all(
-          zones.map(async (zone) => {
-            const methodsResponse = await WooCommerce.get(`shipping/zones/${zone.id}/methods`);
-            const methods: ShippingMethodDataType[] = methodsResponse.data.filter((method: ShippingMethodDataType) => method.enabled);
-            return {
-              ...zone,
-              methods,
-              locations: (await WooCommerce.get(`shipping/zones/${zone.id}/locations`)).data,
-            };
-          })
-        );
-
-        // Include zone ID 0 as fallback
-        const defaultZoneMethods = await WooCommerce.get('shipping/zones/0/methods');
-        zonesWithMethods.push({
-          id: 0,
-          name: 'Locations not covered',
-          methods: defaultZoneMethods.data.filter((method: ShippingMethodDataType) => method.enabled),
-          locations: [],
-          order: 0, // Add the missing 'order' property
-        });
-
-        return zonesWithMethods;
+        const response = await WooCommerce.get('payment_gateways');
+        const gateways: PaymentGatewayDataType[] = response.data;
+        return gateways
+          .filter((gateway) => gateway.enabled && SUPPORTED_GATEWAY_IDS.has(gateway.id))
+          .sort((a, b) => a.order - b.order);
       },
-      ["shipping-zones"],
-      { revalidate: REFERENCE_REVALIDATE_SECONDS, tags: ["shipping"] }
+      ["payment-gateways"],
+      { revalidate: 300, tags: ["payment-gateways"] } // admins toggle gateways more often than shipping zones/taxes
     );
-
     return await getCached();
   } catch (error) {
-    console.error('Error fetching shipping zones:', error);
+    console.error("Error fetching payment gateways:", error);
     return [];
   }
 }
-
-export const getShippingData = async (
-  country: string,
-  state: string
-): Promise<ShippingMethodDataType> => {
-  try {
-    // Fetch all shipping zones
-    const response = await WooCommerce.get('shipping/zones');
-    const shippingZones: ShippingZoneDataType[] = response.data;
-
-    let matchingZone: ShippingZoneDataType | null = null;
-
-    // Iterate over zones to find a match
-    for (const zone of shippingZones) {
-      if (zone.id === 0) continue; // Skip "Locations not covered" zone initially
-
-      // Fetch locations for the current zone
-      const zoneLocationsResponse = await WooCommerce.get(`shipping/zones/${zone.id}/locations`);
-      const zoneLocations: ShippingLocationDataType[] = zoneLocationsResponse.data;
-
-      // Check if any location in the zone matches the provided country and state
-      const isMatch = zoneLocations.some((location) => {
-        if (location.type === 'country' && location.code === country) {
-          return true; // Match country-only zones
-        }
-        if (location.type === 'state' && location.code === `${country}:${state}`) {
-          return true; // Match state (e.g., "BD:BD-54")
-        }
-        // Add city or postcode matching if needed
-        return false;
-      });
-
-      if (isMatch) {
-        matchingZone = zone;
-        console.log(`Matched Zone: ${zone.name} (ID: ${zone.id})`);
-        break;
-      }
-    }
-
-    // If no matching zone, fall back to zone ID 0
-    const targetZoneId = matchingZone ? matchingZone.id : 0;
-    const zoneName = matchingZone ? matchingZone.name : 'Locations not covered';
-
-    // Fetch shipping methods for the selected zone
-    const shippingMethodsResponse = await WooCommerce.get(`shipping/zones/${targetZoneId}/methods`);
-    const shippingMethods: ShippingMethodDataType[] = shippingMethodsResponse.data;
-
-    // Filter enabled methods and return the first one
-    const enabledMethods = shippingMethods.filter((method) => method.enabled);
-    if (enabledMethods.length > 0) {
-      console.log(`Shipping method for zone ${zoneName}:`, enabledMethods[0]);
-      return enabledMethods[0];
-    } else {
-      throw new Error(`No enabled shipping methods available for zone ${zoneName}`);
-    }
-  } catch (error) {
-    console.error('Error fetching shipping data:', error);
-    throw new Error(`Failed to fetch shipping data: ${error}`);
-  }
-};
 
 export const getAttributesWithTerms = async (): Promise<AttributesWithTermsType[]> => {
   try {

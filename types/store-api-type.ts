@@ -133,10 +133,17 @@ export interface StoreApiCart {
 }
 
 // Shape of a Store API error response (e.g. add-item on an out-of-stock variation).
+// On a `rest_invalid_param` error (e.g. an address failing WooCommerce's server-side
+// validation), `data.params`/`data.details` carry the actual per-field reason — the
+// top-level `message` is just "Invalid parameter(s): billing_address, shipping_address".
 export interface StoreApiErrorResponse {
     code: string
     message: string
-    data?: { status: number }
+    data?: {
+        status: number
+        params?: Record<string, string>
+        details?: Record<string, { code: string; message: string }>
+    }
 }
 
 export function isStoreApiError(value: unknown): value is StoreApiErrorResponse {

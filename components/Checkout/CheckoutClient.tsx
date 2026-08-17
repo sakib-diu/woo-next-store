@@ -5,81 +5,104 @@ import { useCart } from '@/context/CartContext';
 import { useModalCartContext } from '@/context/ModalCartContext';
 import { useDebounce } from '@/hooks/useDebounce';
 import { cn, decodeHtmlEntities, fromMinorUnit } from '@/lib/utils';
-import { CountryDataType, ShippingMethodDataType, ShippingZoneDataType, StateDataType, TaxDataType } from '@/types/data-type';
+import type { StoreApiAddress } from '@/lib/store-api-client';
+import type { PaymentGatewayDataType } from '@/actions/data-actions';
+import { CountryDataType, StateDataType } from '@/types/data-type';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as Icon from "@phosphor-icons/react/dist/ssr";
 import Image from "next/image";
 import Link from 'next/link';
-import { redirect, useRouter } from 'next/navigation';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import z from 'zod';
 import { createOrder } from '../../actions/order-actions';
 import { createPaymentIntent } from '../../actions/stripePaymentIntentActions';
+import { checkoutOrder, fetchCart } from '../../actions/cart-actions';
 import { OrderData } from '../../lib/validations/validation';
 import { LineItem } from '../../types/order-type';
 import { PATH } from '../../constant/pathConstants';
 import StripeCheckout from './StripeCheckoutForm';
 
 
-// 1. Zod Schema for client-side validation
-const checkoutSchema = z.object({
-    email: z.string().email({ message: "A valid email is required." }),
-    emailOffers: z.boolean().optional(),
-    phone: z.string().refine(isValidPhoneNumber, { message: "A valid phone number is required." }),
-    country: z.string().min(1, { message: "Country is required." }),
-    firstName: z.string().min(1, { message: "Last name is required." }),
-    lastName: z.string().min(1, { message: "Last name is required." }),
-    address: z.string().min(1, { message: "Address is required." }),
-    apartment: z.string().optional(),
-    city: z.string().min(1, { message: "City is required." }),
-    state: z.string().min(1, { message: "State is required." }),
-    zipcode: z.string().min(1, { message: "ZIP code is required." }),
-    paymentMethod: z.enum(["cod", "stripe"]),
-    useShippingAsBilling: z.boolean(),
-    customerNote: z.string().max(1000, { message: "Note is too long." }).optional(),
-});
+// State is only required when the selected country actually has WooCommerce-defined states —
+// there's no REST-exposed WooCommerce locale rule to check against, so this is the best
+// data-grounded approximation (and it also fixes the prior bug where a country with zero
+// defined states could never pass validation at all).
+function buildCheckoutSchema(countriesData: CountryDataType[]) {
+    return z.object({
+        email: z.string().email({ message: "A valid email is required." }),
+        emailOffers: z.boolean().optional(),
+        phone: z.string().refine(isValidPhoneNumber, { message: "A valid phone number is required." }),
+        country: z.string().min(1, { message: "Country is required." }),
+        firstName: z.string().min(1, { message: "Last name is required." }),
+        lastName: z.string().min(1, { message: "Last name is required." }),
+        address: z.string().min(1, { message: "Address is required." }),
+        apartment: z.string().optional(),
+        city: z.string().min(1, { message: "City is required." }),
+        state: z.string().optional(),
+        zipcode: z.string().min(1, { message: "ZIP code is required." }),
+        paymentMethod: z.enum(["cod", "stripe"]),
+        useShippingAsBilling: z.boolean(),
+        customerNote: z.string().max(1000, { message: "Note is too long." }).optional(),
+    }).superRefine((data, ctx) => {
+        const country = countriesData.find(c => c.code === data.country);
+        const requiresState = !!country && Object.keys(country.states || {}).length > 0;
+        if (requiresState && !data.state) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "State is required.", path: ["state"] });
+        }
+    });
+}
 
-type CheckoutFormValues = z.infer<typeof checkoutSchema>;
+type CheckoutFormValues = z.infer<ReturnType<typeof buildCheckoutSchema>>;
 
 import { Address } from '@/types/customer-type';
 import { STOREINFO } from '../../constant/storeConstants';
 
 interface CheckoutClientProps {
     countriesData: CountryDataType[];
-    taxesData: TaxDataType[];
-    shippingData: ShippingMethodDataType[];
-    shippingZones?: ShippingZoneDataType[];
+    paymentGateways: PaymentGatewayDataType[];
     shippingAddress?: Address | null;
 }
 
 const CheckoutClient: React.FC<CheckoutClientProps> = ({
     countriesData,
-    taxesData,
-    shippingData,
-    shippingZones = [],
+    paymentGateways,
     shippingAddress
 }) => {
     const { openModalCart } = useModalCartContext()
     const { currentCurrency } = useAppData()
-    const { cart, clearCart, applyCoupon, removeCoupon, isMutating, itemLabels } = useCart();
+    const {
+        cart,
+        isLoading,
+        clearCart,
+        applyCoupon,
+        removeCoupon,
+        isMutating,
+        itemLabels,
+        updateCustomerAddress,
+        selectShippingRate,
+    } = useCart();
     const [totalCart, setTotalCart] = useState<number>(0)
     const [selectedCountry, setSelectedCountry] = useState<string>('')
     const [selectedState, setSelectedState] = useState<string>('')
     const [couponCode, setCouponCode] = useState<string>('')
-    const [shippingCost, setShippingCost] = useState<number>(0)
-    const [taxAmount, setTaxAmount] = useState<number>(0)
-    const [selectedTaxs, setSelectedTaxs] = useState<TaxDataType[]>([])
     const [couponError, setCouponError] = useState<string>('')
     const [isApplyingCoupon, setIsApplyingCoupon] = useState<boolean>(false)
-    const [availableShippingMethods, setAvailableShippingMethods] = useState<ShippingMethodDataType[]>([])
-    const [selectedShippingMethod, setSelectedShippingMethod] = useState<string>('')
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState<string | null>(null);
     const [clientSecret, setClientSecret] = useState<string | null>(null);
     const [paymentIntentOrderId, setPaymentIntentOrderId] = useState<number | null>(null)
     const router = useRouter();
+    // Defense-in-depth against a double-fire beyond the `isSubmitting` disable (e.g. a rapid
+    // double-click racing React's state batching) — true order-creation idempotency across
+    // retried requests would need backend support, out of scope here.
+    const submissionLockRef = useRef(false);
 
+    const checkoutSchema = useMemo(() => buildCheckoutSchema(countriesData), [countriesData]);
+
+    const defaultPaymentMethod: CheckoutFormValues['paymentMethod'] =
+        paymentGateways[0]?.id === 'stripe' ? 'stripe' : 'cod';
 
     const {
         register,
@@ -99,7 +122,7 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
             city: '',
             state: '',
             zipcode: '',
-            paymentMethod: 'cod',
+            paymentMethod: defaultPaymentMethod,
             useShippingAsBilling: true,
             customerNote: '',
         }
@@ -108,124 +131,46 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
     // Watch form fields to sync with your existing state and logic
     const watchedCountry = watch("country");
     const watchedState = watch("state");
+    const watchedCity = watch("city");
+    const watchedZipcode = watch("zipcode");
 
     useEffect(() => {
         setSelectedCountry(watchedCountry || '');
         setSelectedState(watchedState || '');
     }, [watchedCountry, watchedState]);
 
+    // A state code left over from a previously selected country can be invalid for the newly
+    // selected one (WooCommerce's server-side validation rejects it, failing checkout with a
+    // generic "Invalid parameter(s)" error) — clear it whenever it no longer belongs to the
+    // current country's state list.
+    const prevCountryRef = useRef<string>('');
+    useEffect(() => {
+        if (prevCountryRef.current && prevCountryRef.current !== watchedCountry) {
+            const country = countriesData.find(c => c.code === watchedCountry);
+            const validStateCodes = Object.keys(country?.states || {});
+            if (watchedState && !validStateCodes.includes(watchedState)) {
+                setValue('state', '');
+            }
+        }
+        prevCountryRef.current = watchedCountry || '';
+    }, [watchedCountry, watchedState, countriesData, setValue]);
 
     const debouncedCountry = useDebounce(selectedCountry, 500);
     const debouncedState = useDebounce(selectedState, 500);
+    const debouncedCity = useDebounce(watchedCity, 500);
+    const debouncedZipcode = useDebounce(watchedZipcode, 500);
 
-    // Calculate available shipping methods based on selected location
-    const calculateShipping = useCallback((country: string, state: string) => {
-        if (!country) {
-            setAvailableShippingMethods([])
-            setShippingCost(0)
-            setSelectedShippingMethod('')
-            return
-        }
-
-        // Find matching shipping zone
-        let matchingZone = null
-        let matchingMethods: ShippingMethodDataType[] = []
-
-        // Check if we have shipping zones data, if not use the flat shipping data
-        if (shippingZones.length > 0) {
-            for (const zone of shippingZones) {
-                if (zone.id === 0) continue // Skip "Locations not covered" initially
-
-                const isMatch = zone.locations?.some((location) => {
-                    if (location.type === 'country' && location.code === country) {
-                        return true // Match country-only zones
-                    }
-                    if (location.type === 'state' && location.code === `${country}:${state}`) {
-                        return true // Match state zones
-                    }
-                    return false
-                })
-
-                if (isMatch) {
-                    matchingZone = zone
-                    matchingMethods = zone.methods || []
-                    break
-                }
-            }
-
-            // If no matching zone found, use zone 0 (locations not covered)
-            if (!matchingZone) {
-                const defaultZone = shippingZones.find(zone => zone.id === 0)
-                if (defaultZone) {
-                    matchingMethods = defaultZone.methods || []
-                }
-            }
-        } else {
-            // Fallback to flat shipping data if zones not available
-            matchingMethods = shippingData
-        }
-
-        // Filter enabled methods
-        const enabledMethods = matchingMethods.filter(method => method.enabled)
-        setAvailableShippingMethods(enabledMethods)
-
-        // Auto-select first method if available
-        if (enabledMethods.length > 0) {
-            const firstMethod = enabledMethods[0]
-            setSelectedShippingMethod(firstMethod.id.toString())
-            setShippingCost(Number(firstMethod.settings.cost?.value || 0))
-        } else {
-            setSelectedShippingMethod('')
-            setShippingCost(0)
-        }
-    }, [shippingZones, shippingData])
-
-
-    // Calculate applicable taxes based on selected location
-    const calculateTaxes = useCallback((country: string, state: string, subtotal: number) => {
-        if (!country || subtotal <= 0) {
-            setTaxAmount(0)
-            return
-        }
-
-        // Find applicable tax rates
-        const applicableTaxes = taxesData.filter(tax => {
-            // Check country match
-            if (tax.country && tax.country !== country) {
-                return false
-            }
-
-            // Check state match if specified
-            // if (tax.state && state && tax.state !== state) {
-            //     return false
-            // }
-
-            return true
-        })
-
-        // Sort by priority (lower number = higher priority)
-        applicableTaxes.sort((a, b) => a.priority - b.priority)
-        setSelectedTaxs(applicableTaxes)
-
-
-        let totalTax = 0
-        let taxableAmount = subtotal
-
-        // Calculate taxes based on priority and compound settings
-        for (const tax of applicableTaxes) {
-            const taxRate = parseFloat(tax.rate) / 100
-            const currentTax = taxableAmount * taxRate
-
-            totalTax += currentTax
-
-            // If compound tax, add to taxable amount for next calculations
-            if (tax.compound) {
-                taxableAmount += currentTax
-            }
-        }
-
-        setTaxAmount(totalTax)
-    }, [taxesData])
+    // Push the (debounced) shipping address to WooCommerce's own cart so it recomputes real
+    // shipping_rates/totals — this is what fixes Bug 4/5: nothing here is computed client-side.
+    useEffect(() => {
+        if (!debouncedCountry) return;
+        updateCustomerAddress({
+            country: debouncedCountry,
+            state: debouncedState,
+            city: debouncedCity,
+            postcode: debouncedZipcode,
+        });
+    }, [debouncedCountry, debouncedState, debouncedCity, debouncedZipcode, updateCustomerAddress]);
 
     const calculateCartTotal = useCallback(() => {
         return fromMinorUnit(cart.totals.total_items, cart.totals.currency_minor_unit)
@@ -235,25 +180,6 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
     useEffect(() => {
         setTotalCart(calculateCartTotal())
     }, [calculateCartTotal])
-
-    // Effect for debounced shipping calculation
-    useEffect(() => {
-        calculateShipping(debouncedCountry, debouncedState)
-    }, [debouncedCountry, debouncedState, calculateShipping])
-
-    const handleCountryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        setSelectedCountry(e.target.value)
-        setSelectedState('') // Reset state when country changes
-    }
-
-    const handleStateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        setSelectedState(e.target.value)
-    }
-
-    const handleShippingMethodChange = (methodId: string, cost: number) => {
-        setSelectedShippingMethod(methodId)
-        setShippingCost(cost)
-    }
 
     const handleCouponApply = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -282,17 +208,13 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
         return fromMinorUnit(cart.totals.total_discount, cart.totals.currency_minor_unit)
     }, [cart.totals])
 
-    const calculateTotalWithDiscountShippingAndTax = useCallback(() => {
-        const discount = calculateDiscountAmount()
-        return totalCart - discount + shippingCost + taxAmount
-    }, [totalCart, calculateDiscountAmount, shippingCost, taxAmount])
-
-    // Effect for tax calculation when location or subtotal changes
-    useEffect(() => {
-        const discount = calculateDiscountAmount()
-        const subtotalAfterDiscount = totalCart - discount
-        calculateTaxes(selectedCountry, selectedState, subtotalAfterDiscount)
-    }, [selectedCountry, selectedState, totalCart, calculateDiscountAmount, calculateTaxes])
+    const shippingRateOptions = useMemo(
+        () =>
+            cart.shipping_rates.flatMap((pkg) =>
+                pkg.shipping_rates.map((rate) => ({ ...rate, package_id: pkg.package_id }))
+            ),
+        [cart.shipping_rates]
+    );
 
     const getSelectedCountryStates = () => {
         const country = countriesData.find(c => c.code === selectedCountry)
@@ -303,114 +225,184 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
         }))
     }
 
+    const buildAddressPayload = (formData: CheckoutFormValues): { billing: StoreApiAddress; shipping: StoreApiAddress } => {
+        const billing: StoreApiAddress = {
+            first_name: formData.firstName || '',
+            last_name: formData.lastName,
+            address_1: formData.address,
+            address_2: formData.apartment || '',
+            city: formData.city,
+            state: formData.state || '',
+            postcode: formData.zipcode,
+            country: formData.country,
+            email: formData.email,
+            phone: formData.phone,
+        };
+        const shipping: StoreApiAddress = {
+            first_name: formData.firstName || '',
+            last_name: formData.lastName,
+            address_1: formData.address,
+            address_2: formData.apartment || '',
+            city: formData.city,
+            state: formData.state || '',
+            postcode: formData.zipcode,
+            country: formData.country,
+        };
+        return { billing, shipping };
+    };
+
     const onSubmit = async (formData: CheckoutFormValues) => {
+        if (submissionLockRef.current) return;
+        submissionLockRef.current = true;
         setIsSubmitting(true);
         setSubmitError(null);
 
-        const temporaryCartItems = [...cart.items];
-
-        // Prepare the data payload for the createOrder server action
-        const orderPayload: OrderData = {
-            payment_method: formData.paymentMethod,
-            payment_method_title: formData.paymentMethod === 'cod' ? 'Cash on Delivery' : 'Stripe',
-            billing: {
-                first_name: formData.firstName || '',
-                last_name: formData.lastName,
-                address_1: formData.address,
-                address_2: formData.apartment || '',
-                city: formData.city,
-                state: formData.state,
-                postcode: formData.zipcode,
-                country: formData.country,
-                email: formData.email,
-                phone: formData.phone,
-            },
-            shipping: {
-                email: formData.email,
-                phone: formData.phone,
-                first_name: formData.firstName || '',
-                last_name: formData.lastName,
-                address_1: formData.address,
-                address_2: formData.apartment || '',
-                city: formData.city,
-                state: formData.state,
-                postcode: formData.zipcode,
-                country: formData.country,
-            },
-            customer_note: formData.customerNote || '',
-        };
-
-        // No price/total sent here — WooCommerce computes authoritative pricing itself
-        // from product_id/variation_id, closing the gap where the client used to dictate price.
-        const lineItems: LineItem[] = temporaryCartItems.map(item => ({
-            product_id: item.type === 'variation' ? undefined : item.id,
-            variation_id: item.type === 'variation' ? item.id : undefined,
-            quantity: item.quantity,
-            name: item.name,
-            meta_data: [
-                {
-                    id: 0,
-                    key: 'product_image',
-                    value: item.images[0]?.src || ''
-                },
-                ...(item.variation.length > 0 ? item.variation : itemLabels[item.key] || []).map((attr, i) => ({
-                    id: i + 1,
-                    key: attr.attribute,
-                    value: attr.value,
-                })),
-            ]
-        }));
-
-        const shippingLines = selectedShippingMethod ? [{
-            method_id: selectedShippingMethod,
-            method_title: availableShippingMethods.find(m => m.id.toString() === selectedShippingMethod)?.title || '',
-            total: shippingCost.toFixed(2),
-        }] : [];
-
         try {
-            // This part is the same for both payment methods
+            const { billing, shipping } = buildAddressPayload(formData);
+
+            if (formData.paymentMethod === 'cod') {
+                // COD goes straight through the Store API's own /checkout — the order is built
+                // from the actual server-side cart, not a client-reconstructed line-item list.
+                const result = await checkoutOrder({
+                    billing_address: billing,
+                    shipping_address: shipping,
+                    payment_method: 'cod',
+                    customer_note: formData.customerNote || '',
+                });
+
+                if (!result.ok) {
+                    throw new Error(result.error || 'An unknown error occurred while placing your order.');
+                }
+
+                router.push(`${PATH.THANKYOU}?orderId=${result.orderId}`);
+                return;
+            }
+
+            // Stripe keeps creating the order via the admin API (see implementation plan for why
+            // Store API checkout isn't safe for this gateway yet), but re-validates against the
+            // live server cart immediately before doing so, since the client-held `cart` snapshot
+            // could be stale by the time of submit (another tab, a race with a mutation).
+            const liveCartResult = await fetchCart();
+            if (!liveCartResult.ok) {
+                throw new Error(liveCartResult.error);
+            }
+            const liveItems = liveCartResult.cart.items;
+            const cartChanged =
+                liveItems.length !== cart.items.length ||
+                liveItems.some((liveItem) => {
+                    const match = cart.items.find((item) => item.key === liveItem.key);
+                    return !match || match.quantity !== liveItem.quantity;
+                });
+            if (cartChanged) {
+                throw new Error('Your cart changed since this page loaded. Please review your cart and try again.');
+            }
+
+            const orderPayload: OrderData = {
+                payment_method: formData.paymentMethod,
+                payment_method_title: 'Stripe',
+                billing: {
+                    first_name: formData.firstName || '',
+                    last_name: formData.lastName,
+                    address_1: formData.address,
+                    address_2: formData.apartment || '',
+                    city: formData.city,
+                    state: formData.state || '',
+                    postcode: formData.zipcode,
+                    country: formData.country,
+                    email: formData.email,
+                    phone: formData.phone,
+                },
+                shipping: {
+                    email: formData.email,
+                    phone: formData.phone,
+                    first_name: formData.firstName || '',
+                    last_name: formData.lastName,
+                    address_1: formData.address,
+                    address_2: formData.apartment || '',
+                    city: formData.city,
+                    state: formData.state || '',
+                    postcode: formData.zipcode,
+                    country: formData.country,
+                },
+                customer_note: formData.customerNote || '',
+            };
+
+            // No price/total sent here — WooCommerce computes authoritative pricing itself
+            // from product_id/variation_id, closing the gap where the client used to dictate price.
+            const lineItems: LineItem[] = liveItems.map(item => ({
+                product_id: item.type === 'variation' ? undefined : item.id,
+                variation_id: item.type === 'variation' ? item.id : undefined,
+                quantity: item.quantity,
+                name: item.name,
+                meta_data: [
+                    {
+                        id: 0,
+                        key: 'product_image',
+                        value: item.images[0]?.src || ''
+                    },
+                    ...(item.variation.length > 0 ? item.variation : itemLabels[item.key] || []).map((attr, i) => ({
+                        id: i + 1,
+                        key: attr.attribute,
+                        value: attr.value,
+                    })),
+                ]
+            }));
+
+            const selectedRate = shippingRateOptions.find(rate => rate.selected);
+            const shippingLines = selectedRate ? [{
+                method_id: selectedRate.method_id,
+                method_title: selectedRate.name,
+                total: fromMinorUnit(selectedRate.price, selectedRate.currency_minor_unit).toFixed(2),
+            }] : [];
+
             const result = await createOrder({
                 orderData: orderPayload,
                 lineItems,
-                cart_tax: taxAmount,
+                cart_tax: fromMinorUnit(cart.totals.total_tax, cart.totals.currency_minor_unit),
                 shipping_lines: shippingLines,
                 coupon_lines: cart.coupons.map(c => ({ code: c.code })),
             });
 
-            if (result.success && result.order) {
-                // --- This is the new conditional logic based on payment method ---
-                if (formData.paymentMethod === 'cod') {
-                    // For Cash on Delivery, redirect to the thank you page
-                    console.log("Order created with COD. Redirecting...");
-                    // Redirect to thank you page with orderId
-                    router.push(`${PATH.THANKYOU}?orderId=${result.order.id}`);
-                } else if (formData.paymentMethod === 'stripe') {
-                    // For Stripe, execute your payment processing code here
-                    console.log("Order created. Proceeding to Stripe payment...");
-
-                    const stripeResponse = await createPaymentIntent(result.order.id)
-                    if (!stripeResponse || !stripeResponse.clientSecret) {
-                        console.log("Failed to create Stripe payment intent", stripeResponse.error);
-                    } else {
-                        setClientSecret(stripeResponse.clientSecret);
-                        setPaymentIntentOrderId(stripeResponse.orderId)
-                    }
-
-                }
-            } else {
-                console.error("Error creating order:", result.error);
+            if (!result.success || !result.order) {
                 throw new Error(result.error || "An unknown error occurred while creating the order.");
             }
+
+            const stripeResponse = await createPaymentIntent(result.order.id)
+            if (!stripeResponse || !stripeResponse.clientSecret) {
+                throw new Error(stripeResponse?.error || 'Failed to start payment.');
+            }
+            setClientSecret(stripeResponse.clientSecret);
+            setPaymentIntentOrderId(stripeResponse.orderId ?? result.order.id)
         } catch (err: unknown) {
             setSubmitError(err instanceof Error ? err.message : 'An unexpected error occurred');
-            console.log("Error creating order:", err);
         } finally {
             setIsSubmitting(false);
+            submissionLockRef.current = false;
         }
     };
 
-    if (cart.items.length === 0) {
-        redirect('/cart'); // Redirect to cart if no items in cart
+    // This replaces the old render-time `redirect()`, which could fire on a cold load before the
+    // client cart had ever actually been fetched (Bug 1) — gated on `isLoading` and pushed into
+    // an effect instead of a render-time side effect. The `clientSecret` check keeps it from
+    // yanking someone away mid-Stripe-payment if the cart state blips right after checkout.
+    const shouldRedirectToCart = !isLoading && cart.items.length === 0 && clientSecret === null;
+
+    useEffect(() => {
+        if (shouldRedirectToCart) {
+            router.replace(PATH.CART);
+        }
+    }, [shouldRedirectToCart, router]);
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <Icon.CircleNotchIcon className="animate-spin" size={32} />
+            </div>
+        );
+    }
+
+    if (shouldRedirectToCart) {
+        return null;
     }
 
 
@@ -549,36 +541,30 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
                                                 <h4 className="heading4 md:mt-10 mt-6">Shipping method</h4>
                                                 <div className="shipping-methods mt-5">
                                                     {selectedCountry ? (
-                                                        availableShippingMethods.length > 0 ? (
+                                                        shippingRateOptions.length > 0 ? (
                                                             <div className="space-y-3">
-                                                                {availableShippingMethods.map((method) => (
-                                                                    <div key={method.id} className="flex items-center justify-between p-4 border border-line rounded-lg">
+                                                                {shippingRateOptions.map((rate) => (
+                                                                    <div key={rate.rate_id} className="flex items-center justify-between p-4 border border-line rounded-lg">
                                                                         <div className="flex items-center gap-3">
                                                                             <input
                                                                                 type="radio"
                                                                                 name="shipping_method"
-                                                                                id={`shipping_${method.id}`}
-                                                                                value={method.id}
-                                                                                checked={selectedShippingMethod === method.id.toString()}
-                                                                                onChange={() => handleShippingMethodChange(
-                                                                                    method.id.toString(),
-                                                                                    Number(method.settings.cost?.value || 0)
-                                                                                )}
+                                                                                id={`shipping_${rate.rate_id}`}
+                                                                                value={rate.rate_id}
+                                                                                checked={rate.selected}
+                                                                                onChange={() => selectShippingRate(rate.package_id, rate.rate_id)}
                                                                             />
-                                                                            <label htmlFor={`shipping_${method.id}`} className="cursor-pointer">
-                                                                                {method.title}
-                                                                                {/* {method.method_description && (
-                                                                            <p className="text-sm text-secondary mt-1">{method.method_description}</p>
-                                                                        )} */}
+                                                                            <label htmlFor={`shipping_${rate.rate_id}`} className="cursor-pointer">
+                                                                                {rate.name}
                                                                             </label>
                                                                         </div>
                                                                         <span className="text-title">
-                                                                            {Number(method.settings.cost?.value || 0) === 0 ? (
+                                                                            {fromMinorUnit(rate.price, rate.currency_minor_unit) === 0 ? (
                                                                                 'Free'
                                                                             ) : (
                                                                                 <>
                                                                                     {decodeHtmlEntities(currentCurrency?.symbol || '$')}
-                                                                                    {Number(method.settings.cost?.value || 0).toFixed(2)}
+                                                                                    {fromMinorUnit(rate.price, rate.currency_minor_unit).toFixed(2)}
                                                                                 </>
                                                                             )}
                                                                         </span>
@@ -601,26 +587,35 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
                                                     <p className="body1 text-secondary2 mt-3">All transactions are secure and encrypted.</p>
                                                     <div className="list-payment mt-5">
                                                         <div className="payment-methods">
-                                                            <div className="item flex items-center gap-2 relative px-5 border border-line rounded-t-lg">
-                                                                <input
-                                                                    type="radio"
-                                                                    value="cod"
-                                                                    className="cursor-pointer"
-                                                                    {...register("paymentMethod")}
-                                                                />
-                                                                <label htmlFor="cod_payment" className="w-full py-4 cursor-pointer">Cash on Delivery</label>
-                                                                <Icon.TruckIcon className="text-xl absolute top-1/2 right-5 -translate-y-1/2" />
-                                                            </div>
-                                                            <div className="item flex items-center gap-2 relative px-5 border border-line rounded-b-lg">
-                                                                <input
-                                                                    type="radio"
-                                                                    value="stripe"
-                                                                    className="cursor-pointer"
-                                                                    {...register("paymentMethod")}
-                                                                />
-                                                                <label htmlFor="stripe_payment" className="w-full py-4 cursor-pointer">Credit Card</label>
-                                                                <Icon.CreditCardIcon className="text-xl absolute top-1/2 right-5 -translate-y-1/2" />
-                                                            </div>
+                                                            {paymentGateways.length === 0 ? (
+                                                                <div className="body1 text-secondary2 py-4 px-5 border border-line rounded-lg bg-surface">
+                                                                    No payment methods are currently available. Please contact support.
+                                                                </div>
+                                                            ) : (
+                                                                paymentGateways.map((gateway, idx) => (
+                                                                    <div
+                                                                        key={gateway.id}
+                                                                        className={cn(
+                                                                            "item flex items-center gap-2 relative px-5 border border-line",
+                                                                            idx === 0 ? "rounded-t-lg" : "",
+                                                                            idx === paymentGateways.length - 1 ? "rounded-b-lg" : ""
+                                                                        )}
+                                                                    >
+                                                                        <input
+                                                                            type="radio"
+                                                                            value={gateway.id}
+                                                                            className="cursor-pointer"
+                                                                            {...register("paymentMethod")}
+                                                                        />
+                                                                        <label className="w-full py-4 cursor-pointer">{decodeHtmlEntities(gateway.title) || gateway.title}</label>
+                                                                        {gateway.id === 'cod' ? (
+                                                                            <Icon.TruckIcon className="text-xl absolute top-1/2 right-5 -translate-y-1/2" />
+                                                                        ) : (
+                                                                            <Icon.CreditCardIcon className="text-xl absolute top-1/2 right-5 -translate-y-1/2" />
+                                                                        )}
+                                                                    </div>
+                                                                ))
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -631,7 +626,7 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
                                                             isSubmitting ? 'cursor-not-allowed opacity-50' : '',
                                                             watch("paymentMethod") === 'cod' ? 'bg-primary havor:bg-primary/90' : 'bg-primary hover:bg-primary/90'
                                                         )}
-                                                        disabled={isSubmitting}
+                                                        disabled={isSubmitting || paymentGateways.length === 0}
                                                     >
                                                         {isSubmitting ? 'Processing...' : watch("paymentMethod") === 'cod' ? 'Place Order' : 'Pay Now'}
                                                     </button>
@@ -731,19 +726,19 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
                             <div className="ship-block flex items-center justify-between mt-4">
                                 <strong className="heading6">Shipping</strong>
                                 <span className="body1">
-                                    {shippingCost === 0 && !taxAmount ? (
+                                    {cart.totals.total_shipping === null ? (
                                         <span className="text-secondary">Enter shipping address</span>
                                     ) : (
                                         <span className='heading6'>
-                                            {decodeHtmlEntities(currentCurrency?.symbol || '$')}{shippingCost?.toFixed(2)}
+                                            {decodeHtmlEntities(currentCurrency?.symbol || '$')}{fromMinorUnit(cart.totals.total_shipping, cart.totals.currency_minor_unit).toFixed(2)}
                                         </span>
                                     )}
                                 </span>
                             </div>
-                            {taxAmount > 0 && selectedTaxs.map((tax) => (
-                                <div key={tax.id} className="tax-block flex items-center justify-between mt-4">
+                            {cart.totals.tax_lines.map((tax, idx) => (
+                                <div key={`${tax.name}-${idx}`} className="tax-block flex items-center justify-between mt-4">
                                     <strong className="heading6">{tax.name.toUpperCase()}</strong>
-                                    <strong className="heading6">{decodeHtmlEntities(currentCurrency?.symbol || '$')}{(Number(tax.rate) / 100 * totalCart).toFixed(2)}</strong>
+                                    <strong className="heading6">{decodeHtmlEntities(currentCurrency?.symbol || '$')}{fromMinorUnit(tax.price, cart.totals.currency_minor_unit).toFixed(2)}</strong>
                                 </div>
                             ))}
                             <div className="total-cart-block flex items-center justify-between mt-4">
@@ -751,7 +746,7 @@ const CheckoutClient: React.FC<CheckoutClientProps> = ({
                                 <div className="flex items-end gap-2">
                                     <span className="body1 text-secondary">{currentCurrency?.code || 'USD'}</span>
                                     <strong className="heading4">
-                                        {decodeHtmlEntities(currentCurrency?.symbol || '$')}{calculateTotalWithDiscountShippingAndTax().toFixed(2)}
+                                        {decodeHtmlEntities(currentCurrency?.symbol || '$')}{fromMinorUnit(cart.totals.total_price, cart.totals.currency_minor_unit).toFixed(2)}
                                     </strong>
                                 </div>
                             </div>

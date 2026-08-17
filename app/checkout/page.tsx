@@ -2,7 +2,7 @@ import { getCustomerInfo } from '@/actions/customer-action';
 import { User } from '@/actions/auth-actions';
 import { cookies } from 'next/headers';
 import React from 'react'
-import { getCountries, getTaxes, getShippingZones } from '@/actions/data-actions'
+import { getCountries, getPaymentGateways } from '@/actions/data-actions'
 import CheckoutClient from '@/components/Checkout/CheckoutClient'
 import Footer from '../../components/Footer/Footer'
 
@@ -27,23 +27,16 @@ const Checkout = async () => {
     }
 
     // Fetch all required data server-side
-    const [countriesData, taxesData, shippingZones] = await Promise.all([
+    const [countriesData, paymentGateways] = await Promise.all([
         getCountries(),
-        getTaxes(),
-        getShippingZones(),
-
+        getPaymentGateways(),
     ])
-
-    // Extract shipping methods from zones (for backward compatibility)
-    const shippingData = shippingZones.flatMap(zone => zone.methods || [])
 
     return (
         <>
             <CheckoutClient
                 countriesData={countriesData}
-                taxesData={taxesData}
-                shippingData={shippingData}
-                shippingZones={shippingZones}
+                paymentGateways={paymentGateways}
                 shippingAddress={customer?.shipping}
             />
             <Footer />
